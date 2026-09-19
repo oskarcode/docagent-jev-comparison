@@ -1,0 +1,21 @@
+src/lib/registry.ts
+  s_5692a7809f154d::t_e9d5ed1d859613 1-296
+test/registry.test.ts
+  s_5692a7809f154d::t_f93fe7efd959a1 1-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "88ff90a3ed04ca3689f09743abff61e12c6a8a59",
+  "prompts": {},
+  "sessions": {
+    "s_5692a7809f154d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fa9de2b97ffeasxg9iXbPFwBU8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "oskarcode <manaskarsanqu@gmail.com>"
+    }
+  }
+}
