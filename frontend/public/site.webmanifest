@@ -1,0 +1,17 @@
+{
+  "name": "DocAgent Compare",
+  "short_name": "DocCompare",
+  "description": "Compare LLM-only and Jev-guided documentation routing.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8e3d8",
+  "theme_color": "#202a31",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

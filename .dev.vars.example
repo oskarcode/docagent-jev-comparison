@@ -1,0 +1,7 @@
+# Required for Jev routing. The API token needs Account > Workers AI > Read.
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+
+# Optional bearer tokens for MCP servers that require authentication.
+CF_DOCS_VECTORIZE_MCP_TOKEN=
+AWS_KNOWLEDGE_MCP_TOKEN=
