@@ -17,7 +17,6 @@ import {
 import { messageText, messageTrace } from './activity.ts';
 
 type RunPhase = 'ready' | 'running' | 'complete';
-type Rating = 'baseline' | 'jev' | 'tie' | null;
 
 type ComparisonRun = {
   pairId: string;
@@ -28,7 +27,6 @@ type ComparisonRun = {
   baselineConversationId: string;
   jevConversationId: string;
   phase: RunPhase;
-  startedAt: number;
   error?: string;
 };
 
@@ -116,15 +114,88 @@ function laneResult(message: FlueConversationMessage | undefined, lane?: 'baseli
       ? sourceParts.every((part) => part.type === 'dynamic-tool' && part.toolName.startsWith('mcp__aws-knowledge__'))
       : true;
   const callBudgetValid = sourceParts.length <= (routingDecision?.includes('Vendor: cross_vendor') ? 4 : 2);
+  const elapsedMs = typeof metadata.elapsedMs === 'number' ? metadata.elapsedMs : null;
+  const classificationMs = typeof classifierData?.durationMs === 'number' ? classifierData.durationMs : 0;
+  const toolsMs = toolParts.reduce((total, part) => total + (typeof part.durationMs === 'number' ? part.durationMs : 0), 0);
   return {
     answer: messageText(message),
-    elapsedMs: typeof metadata.elapsedMs === 'number' ? metadata.elapsedMs : null,
+    elapsedMs,
+    classificationMs,
+    toolsMs,
+    modelMs: elapsedMs === null ? null : Math.max(0, elapsedMs - classificationMs - toolsMs),
     toolCalls: toolParts.length + (classifierData ? 1 : 0),
     sourceCalls: sourceParts.length,
     routingDecision,
     protocolValid: Boolean(classifierStartedCorrectly && routingDecision && routeStoppedCorrectly && vendorUsedCorrectly && callBudgetValid),
     usage: metadata.usage ?? null,
   };
+}
+
+type LaneResult = NonNullable<ReturnType<typeof laneResult>>;
+
+const TIMING_PHASES = [
+  { key: 'classificationMs', label: 'Classification', className: 'classification' },
+  { key: 'toolsMs', label: 'Tools', className: 'tools' },
+  { key: 'modelMs', label: 'Model response', className: 'model' },
+] as const;
+
+function formatDuration(durationMs: number | null): string {
+  if (durationMs === null) return '-';
+  return durationMs < 1000 ? `${Math.round(durationMs)}ms` : `${(durationMs / 1000).toFixed(2)}s`;
+}
+
+function TimingComparison({ baseline, jev }: { baseline: LaneResult; jev: LaneResult }) {
+  const maxTotal = Math.max(baseline.elapsedMs ?? 0, jev.elapsedMs ?? 0, 1);
+  const totalDifference = baseline.elapsedMs !== null && jev.elapsedMs !== null
+    ? baseline.elapsedMs - jev.elapsedMs
+    : null;
+
+  function timingRow(lane: 'baseline' | 'jev', result: LaneResult) {
+    return (
+      <div className="timing-lane">
+        <strong><i className={lane} />{lane === 'baseline' ? 'LLM routing' : 'Jev routing'}</strong>
+        <div className="timing-track" aria-label={`${lane === 'baseline' ? 'LLM' : 'Jev'} timing breakdown`}>
+          {TIMING_PHASES.map((phase) => {
+            const duration = result[phase.key] ?? 0;
+            return duration > 0 && (
+              <span
+                className={phase.className}
+                style={{ width: `${(duration / maxTotal) * 100}%` }}
+                title={`${phase.label}: ${formatDuration(duration)}`}
+                key={phase.key}
+              />
+            );
+          })}
+        </div>
+        <b>{formatDuration(result.elapsedMs)}</b>
+      </div>
+    );
+  }
+
+  return (
+    <section className="timing-comparison">
+      <header>
+        <div><strong>Step timing</strong><span>Latest response, measured end to end</span></div>
+        {totalDifference !== null && (
+          <p><strong>{totalDifference === 0 ? 'Tie' : totalDifference > 0 ? 'Jev faster' : 'LLM faster'}</strong><span>{totalDifference === 0 ? 'Same total time' : `${formatDuration(Math.abs(totalDifference))} overall`}</span></p>
+        )}
+      </header>
+      <div className="timing-bars">
+        {timingRow('baseline', baseline)}
+        {timingRow('jev', jev)}
+      </div>
+      <div className="timing-phases">
+        {TIMING_PHASES.map((phase) => (
+          <div key={phase.key}>
+            <strong><i className={phase.className} />{phase.label}</strong>
+            <span><small>LLM</small>{formatDuration(baseline[phase.key])}</span>
+            <span><small>Jev</small>{formatDuration(jev[phase.key])}</span>
+          </div>
+        ))}
+      </div>
+      <small className="timing-note">Model response is derived from total elapsed time minus recorded classification and tool durations.</small>
+    </section>
+  );
 }
 
 function TurnEvents({ message }: { message: FlueConversationMessage }) {
@@ -226,7 +297,6 @@ export function App() {
   const [run, setRun] = useState<ComparisonRun | null>(null);
   const [creating, setCreating] = useState(false);
   const [uiError, setUiError] = useState('');
-  const [rating, setRating] = useState<Rating>(null);
   const startedRun = useRef('');
 
   const baselineUrl = run ? `/api/agents/baseline/${run.baselineConversationId}` : undefined;
@@ -282,9 +352,8 @@ export function App() {
       completedAt: new Date().toISOString(),
       baseline,
       jev,
-      rating,
     }));
-  }, [run, baselineMessage, jevMessage, rating]);
+  }, [run, baselineMessage, jevMessage]);
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -292,7 +361,6 @@ export function App() {
     if (!prompt || busy) return;
     setCreating(true);
     setUiError('');
-    setRating(null);
     try {
       if (run?.phase === 'complete' && run.model === model) {
         setRun({
@@ -325,7 +393,6 @@ export function App() {
         baselineConversationId: body.baselineConversationId,
         jevConversationId: body.jevConversationId,
         phase: 'ready',
-        startedAt: Date.now(),
       });
       setInput('');
     } catch (error) {
@@ -342,26 +409,6 @@ export function App() {
     if (failure) setUiError(failure.reason instanceof Error ? failure.reason.message : 'Could not stop every lane.');
   }
 
-  function exportResult() {
-    if (!run) return;
-    const payload = {
-      pairId: run.pairId,
-      prompts: run.prompts,
-      model: run.model,
-      startedAt: new Date(run.startedAt).toISOString(),
-      exportedAt: new Date().toISOString(),
-      rating,
-      baseline: laneResult(baselineMessage, 'baseline'),
-      jev: laneResult(jevMessage, 'jev'),
-    };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `docagent-comparison-${run.pairId}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   function changeModel(next: ModelId) {
     if (busy) return;
     setModel(next);
@@ -375,7 +422,9 @@ export function App() {
     }
   }
 
-  const comparisonComplete = run?.phase === 'complete' && baselineMessage && jevMessage;
+  const baselineResult = laneResult(baselineMessage, 'baseline');
+  const jevResult = laneResult(jevMessage, 'jev');
+  const comparisonComplete = run?.phase === 'complete' && baselineResult && jevResult;
   const continuingConversation = run?.phase === 'complete' && run.model === model;
 
   return (
@@ -402,15 +451,7 @@ export function App() {
       </section>
 
       {comparisonComplete && (
-        <section className="verdict-bar">
-          <div><strong>Human verdict</strong><span>Which answer is better?</span></div>
-          <div>
-            <button className={rating === 'baseline' ? 'selected' : ''} onClick={() => setRating('baseline')}>LLM routing</button>
-            <button className={rating === 'tie' ? 'selected' : ''} onClick={() => setRating('tie')}>Tie</button>
-            <button className={rating === 'jev' ? 'selected' : ''} onClick={() => setRating('jev')}>Jev routing</button>
-          </div>
-          <button className="export-button" onClick={exportResult}>Export JSON</button>
-        </section>
+        <TimingComparison baseline={baselineResult} jev={jevResult} />
       )}
 
       <footer className="prompt-dock">

@@ -16,7 +16,7 @@ Both lanes use the same visible question, non-reasoning answer model, MCP connec
 3. Follow-up questions reuse the same paired agent IDs so both lanes retain equivalent conversation context.
 4. Flue streams answer and tool events while the browser computes elapsed time and call counts.
 5. The latest completed result and model preference are stored in browser local storage.
-6. The comparison supports a human verdict and JSON export.
+6. The comparison shows classification, documentation-tool, derived model-response, and total timing for both lanes.
 
 Flue Durable Objects retain each paired conversation for reliable execution and streaming. The UI marks either lane invalid when its matching classifier was not the first successful tool call.
 

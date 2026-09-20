@@ -98,15 +98,32 @@ button { color: inherit; }
 .turn-events p span { display: block; margin-top: 3px; color: #6a7276; font-size: 9px; overflow-wrap: anywhere; }
 .turn-events section > small { color: #7c8282; font: 700 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-.verdict-bar { display: grid; grid-template-columns: auto minmax(300px, 1fr) auto; align-items: center; gap: 18px; padding: 11px 14px; border: 1px solid var(--dark); background: #d5d0c5; }
-.verdict-bar > div:first-child strong, .verdict-bar > div:first-child span { display: block; }
-.verdict-bar > div:first-child strong { font: 800 9px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
-.verdict-bar > div:first-child span { margin-top: 3px; color: var(--muted); font-size: 9px; }
-.verdict-bar > div:nth-child(2) { justify-self: center; display: flex; }
-.verdict-bar button { min-height: 31px; padding: 0 12px; border: 1px solid #777d7e; border-right: 0; background: #ebe6da; cursor: pointer; font: 800 9px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
-.verdict-bar button:last-child { border-right: 1px solid #777d7e; }
-.verdict-bar button.selected { background: var(--dark); color: #fff; }
-.verdict-bar .export-button { border: 1px solid var(--dark); background: transparent; }
+.timing-comparison { padding: 12px 14px; border: 1px solid var(--dark); background: #d5d0c5; }
+.timing-comparison > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 10px; }
+.timing-comparison > header div > strong, .timing-comparison > header div > span, .timing-comparison > header p > strong, .timing-comparison > header p > span { display: block; }
+.timing-comparison > header div > strong { font: 800 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.timing-comparison > header div > span, .timing-comparison > header p > span { margin-top: 3px; color: var(--muted); font-size: 9px; }
+.timing-comparison > header p { margin: 0; text-align: right; }
+.timing-comparison > header p > strong { color: var(--blue); font: 800 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+.timing-bars { display: grid; gap: 6px; }
+.timing-lane { display: grid; grid-template-columns: 105px minmax(0, 1fr) 60px; align-items: center; gap: 9px; }
+.timing-lane > strong { display: flex; align-items: center; gap: 6px; font: 800 8px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+.timing-lane > strong i { width: 7px; height: 7px; border-radius: 50%; }
+.timing-lane > strong i.baseline { background: var(--blue); }
+.timing-lane > strong i.jev { background: var(--orange); }
+.timing-lane > b { font: 800 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+.timing-track { height: 17px; display: flex; overflow: hidden; border: 1px solid #858988; background: #ebe6da; }
+.timing-track > span { min-width: 2px; height: 100%; }
+.timing-track .classification, .timing-phases i.classification { background: #655a91; }
+.timing-track .tools, .timing-phases i.tools { background: #4d8f75; }
+.timing-track .model, .timing-phases i.model { background: #d57a34; }
+.timing-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+.timing-phases > div { display: grid; grid-template-columns: minmax(100px, 1fr) auto auto; align-items: center; gap: 12px; padding: 7px 9px; border: 1px solid #aaa79e; background: #e8e3d8; }
+.timing-phases strong { display: flex; align-items: center; gap: 6px; font: 800 8px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+.timing-phases strong i { width: 7px; height: 7px; }
+.timing-phases span { font: 800 9px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+.timing-phases span small { display: block; color: var(--muted); font-size: 7px; text-transform: uppercase; }
+.timing-note { display: block; margin-top: 7px; color: #697176; font-size: 8px; }
 
 .prompt-dock { position: sticky; bottom: 0; padding: 12px; border: 1px solid var(--dark); background: rgba(246, 242, 232, .97); box-shadow: 5px -5px 0 rgba(32, 42, 49, .12); }
 .starter-prompts { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; margin-bottom: 10px; }
@@ -158,9 +175,9 @@ button { color: inherit; }
   .control-board > div:last-child { border-bottom: 0; }
   .result-grid { gap: 0; }
   .lane-card { min-height: 520px; border-left: 0; border-right: 0; box-shadow: none; }
-  .verdict-bar { grid-template-columns: 1fr; gap: 9px; border-left: 0; border-right: 0; }
-  .verdict-bar > div:nth-child(2) { justify-self: stretch; display: grid; grid-template-columns: repeat(3, 1fr); }
-  .verdict-bar .export-button { width: 100%; border: 1px solid var(--dark); }
+  .timing-comparison { border-left: 0; border-right: 0; }
+  .timing-lane { grid-template-columns: 82px minmax(0, 1fr) 52px; gap: 6px; }
+  .timing-phases { grid-template-columns: 1fr; }
   .prompt-dock { padding: 7px; border-left: 0; border-right: 0; box-shadow: none; }
   .starter-prompts > div:first-child { display: none; }
   .starter-prompts > div:last-child { grid-auto-flow: column; grid-auto-columns: minmax(190px, 72vw); grid-template-columns: none; overflow-x: auto; padding-bottom: 3px; }
