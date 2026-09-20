@@ -42,6 +42,33 @@ type ComparisonResponse = {
 const MODEL_KEY = 'docagent_comparison_model';
 const LAST_RESULT_KEY = 'docagent_comparison_last_result';
 
+const STARTER_PROMPTS = [
+  {
+    label: 'Cloudflare design',
+    prompt: 'How should I design a production Worker with Durable Objects?',
+  },
+  {
+    label: 'AWS security',
+    prompt: 'What is the current AWS guidance for securing an S3 bucket?',
+  },
+  {
+    label: 'Cross-vendor',
+    prompt: 'Compare Cloudflare Workers and AWS Lambda for an API backend.',
+  },
+  {
+    label: 'Troubleshooting',
+    prompt: 'How do I troubleshoot Cloudflare Workers error 1101: Worker threw exception?',
+  },
+  {
+    label: 'Needs clarification',
+    prompt: 'How should I configure it for production?',
+  },
+  {
+    label: 'Out of scope',
+    prompt: 'Write a short poem about autumn.',
+  },
+] as const;
+
 function storedModel(): ModelId {
   const value = localStorage.getItem(MODEL_KEY);
   return isModelId(value) ? value : DEFAULT_MODEL_ID;
@@ -388,6 +415,19 @@ export function App() {
 
       <footer className="prompt-dock">
         {(uiError || run?.error) && <p className="error-banner">{uiError || run?.error}</p>}
+        {!run && !input && (
+          <section className="starter-prompts" aria-labelledby="starter-prompts-title">
+            <div><strong id="starter-prompts-title">Try a scenario</strong><span>Choose a prompt to test a routing situation.</span></div>
+            <div>
+              {STARTER_PROMPTS.map((starter) => (
+                <button type="button" onClick={() => setInput(starter.prompt)} key={starter.label}>
+                  <strong>{starter.label}</strong>
+                  <span>{starter.prompt}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         <form onSubmit={(event) => void submit(event)}>
           <label htmlFor="question">{continuingConversation ? 'Follow-up question' : 'New documentation question'}</label>
           <textarea
