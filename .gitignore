@@ -16,3 +16,8 @@ worker-configuration.d.ts
 SESSION_CONTEXT.md
 SESSION_HISTORY.md
 opencode-session-*.json
+
+# Local learning artifacts contain machine-specific paths and stay out of GitHub.
+docs/docagent-compare-learning-guide.html
+docs/learning-agent/
+docs/diagrams/
