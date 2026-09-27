@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DocAgent Compare — Blueprint</title>
+<style>:root{ --accent:#B23A2E; --paper:#F3EEE1; --ink:#21201B; --soft:#6B6657;
+  --rule:#C6BDA3; --band:#EFE8D8; --bg:#E6DFCD; --grid:#211E1408;
+  --mono:'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace; }
+*{ box-sizing:border-box; }
+/* the PAGE never scrolls — only the diagram body does (no scroll from header/toolbar). */
+html,body{ margin:0; height:100%; overflow:hidden; overscroll-behavior:none; }
+body{ background:var(--bg); color:var(--ink); font-family:var(--mono);
+  -webkit-font-smoothing:antialiased; }
+
+/* fixed-viewport frame: a clean app header, then the diagram stage. Only .scroll scrolls. */
+.app{ height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+
+/* app header — ONE clean bar (no inner vertical dividers; only the bottom rule, which
+   aligns with the diagram grid below). brand · project / <scenario ▾> · count */
+.appbar{ flex:0 0 auto; display:flex; align-items:center; gap:16px; height:44px; padding:0 16px;
+  background:var(--band); border-bottom:1px solid var(--rule); }
+.brand{ display:flex; align-items:center; gap:7px; font-weight:700; font-size:13px; white-space:nowrap; }
+.brand .mark{ display:flex; align-items:center; }
+.brand .mark svg{ height:20px; width:auto; display:block; }
+.crumb{ flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:9px; }
+.crumb-proj{ color:var(--soft); font-size:12.5px; white-space:nowrap; }
+.crumb-sep{ color:var(--rule); }
+.barmeta{ flex:0 0 auto; color:var(--soft); font-size:11px; white-space:nowrap; }
+
+/* scenario switcher — the active title IS a dropdown. No ancestor clips (so the menu can
+   escape downward); only the title text itself ellipsises. */
+.switch{ position:relative; min-width:0; flex:0 1 auto; display:flex; }
+.switch-btn{ display:inline-flex; align-items:center; gap:8px; min-width:0; max-width:100%; cursor:pointer;
+  font:inherit; background:none; border:0; padding:3px 7px; margin-left:-7px; border-radius:6px; color:var(--ink); }
+.switch-btn:hover{ background:#0000000d; }
+/* with 2+ scenarios the title IS a dropdown — make it an obvious pill CTA, and never truncate it */
+.app:not(.solo) .switch-btn{ background:var(--paper); border:1px solid var(--rule);
+  padding:4px 11px; margin-left:0; box-shadow:0 1px 2px #00000012; }
+.app:not(.solo) .switch-btn:hover{ border-color:var(--soft); background:#fff8; }
+.switch-title{ min-width:0; font-weight:700; font-size:13px; white-space:nowrap; }
+.switch-caret{ color:var(--ink); font-size:12px; line-height:1; }
+.app.solo .switch-btn{ cursor:default; }
+.app.solo .switch-btn:hover{ background:none; }
+.app.solo .switch-caret{ display:none; }
+.switch-menu{ position:absolute; top:calc(100% + 6px); left:-7px; z-index:40;
+  min-width:320px; max-width:460px; max-height:72vh; overflow:auto;
+  background:var(--paper); border:1px solid var(--rule); box-shadow:0 12px 32px -12px #0008; }
+.switch-menu[hidden]{ display:none; }
+.mitem{ display:block; width:100%; text-align:left; cursor:pointer; font:inherit; color:var(--ink);
+  background:none; border:0; border-bottom:1px solid var(--rule); border-left:3px solid transparent;
+  padding:9px 13px; }
+.mitem:last-child{ border-bottom:0; }
+.mitem:hover{ background:#0000000a; }
+.mitem.active{ border-left-color:var(--accent); background:#0000000f; }
+.mi-title{ display:block; font-size:12px; font-weight:700; }
+.mi-sub{ display:block; margin-top:2px; font-size:10.5px; color:var(--soft);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* stage — the one active scenario, full width + full height */
+.stage{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; background:var(--paper); }
+.card{ display:none; flex:1 1 auto; min-height:0; flex-direction:column; }
+.card.active{ display:flex; }
+
+/* pinned swimlane header above the scrolling body. The geometry is already full-bleed —
+   layout.py spreads the columns to fill FILL_W, so every scenario has the SAME natural width
+   regardless of column count. width:100% then maps that one width onto the viewport, so the
+   on-screen scale is identical across scenarios (no per-count inflation) and fills the width. */
+.head{ flex:0 0 auto; overflow:hidden; border-bottom:1px solid var(--rule); }
+.head svg{ display:block; width:100%; height:auto; }
+/* the ONLY scroll container; the engineering-paper grid tiles the whole area so the canvas
+   feel continues into any space below a short diagram (grid is texture, never load-bearing). */
+.scroll{ flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain;
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px, transparent 1px),
+                   linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:23px 23px; }
+.diagram{ display:block; }
+.diagram svg{ display:block; width:100%; height:auto; }
+
+/* toolbar — bottom row of control cells (lens toggles, legend, export) */
+.toolbar{ flex:0 0 auto; display:flex; align-items:stretch; height:36px; overflow-x:auto;
+  border-top:1px solid var(--rule); background:var(--band); }
+.lenses{ display:flex; align-items:stretch; }
+.lens{ display:flex; align-items:center; white-space:nowrap; padding:0 13px;
+  border:0; border-right:1px solid var(--rule); background:none; font:inherit; font-size:11px;
+  cursor:pointer; color:var(--soft); }
+.lens:hover{ color:var(--ink); background:#0000000a; }
+.lens.on{ background:var(--ink); color:var(--paper); }
+.tb-right{ margin-left:auto; display:flex; align-items:stretch; }
+.legends{ display:flex; align-items:center; padding:0 14px; border-left:1px solid var(--rule); }
+.png{ display:flex; align-items:center; white-space:nowrap; padding:0 14px;
+  border:0; border-left:1px solid var(--rule); background:none; font:inherit; font-size:11px;
+  cursor:pointer; color:var(--ink); }
+.png:hover{ background:#0000000a; }
+.legend{ font-size:11px; color:var(--soft); display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.legend[hidden]{ display:none!important; }
+.legend .sw{ width:11px; height:11px; border-radius:2px; display:inline-block; }
+.legend .ramp{ width:80px; height:9px; display:inline-block; border-radius:2px;
+  background:linear-gradient(90deg,#2FA05A,#9FB83C,#E6B12E,#E07B2A,#C0392B); }
+
+/* messages: entrance + interactive states */
+.msg{ animation:rise .5s ease both; animation-delay:var(--d); }
+@keyframes rise{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
+.msg .arrow.sync{ stroke-dasharray:var(--len); stroke-dashoffset:var(--len);
+  animation:draw .55s ease forwards; animation-delay:var(--d); }
+@keyframes draw{ to{ stroke-dashoffset:0 } }
+.msg{ cursor:pointer; }
+.mtx{ paint-order:stroke; }
+
+/* hover-dim */
+.diagram.hov .msg:not(.hl){ opacity:.16; }
+
+/* path lens */
+.lens-path .msg{ opacity:.16; transition:opacity .2s; }
+.msg.lit{ opacity:1!important; }
+.msg.lit .arrow{ stroke:var(--accent)!important; }
+.msg.lit .ah{ fill:var(--accent)!important; stroke:var(--accent)!important; }
+.msg.lit .mtx{ fill:var(--accent); }
+.msg.lit .tmark *{ stroke:var(--accent)!important; }
+
+/* metric lenses */
+.diagram.lens-cost .msg:not(.has-cost),
+.diagram.lens-lat .msg:not(.has-lat){ opacity:.14; }
+.diagram.lens-cost .msg.has-cost .arrow{ stroke:var(--c-cost)!important; stroke-width:3.4; }
+.diagram.lens-cost .msg.has-cost .ah{ fill:var(--c-cost)!important; stroke:var(--c-cost)!important; }
+.diagram.lens-lat .msg.has-lat .arrow{ stroke:var(--c-lat)!important; stroke-width:3.4; }
+.diagram.lens-lat .msg.has-lat .ah{ fill:var(--c-lat)!important; stroke:var(--c-lat)!important; }
+
+/* click-detail card — tiered: why headline · route sub-line · guard · prose · chips · footer */
+.popover{ position:fixed; z-index:50; max-width:340px; min-width:210px; background:var(--paper);
+  border:1px solid var(--ink); padding:11px 13px; font-size:11.5px; line-height:1.45;
+  box-shadow:0 10px 30px -8px #0008; }
+.popover[hidden]{ display:none; }
+.popover.docked{ left:auto!important; top:auto!important; right:14px; bottom:14px;
+  max-height:calc(100vh - 28px); overflow:auto; }
+.p-why{ font-weight:700; font-size:12.5px; margin-bottom:3px; }
+.p-route{ color:var(--soft); font-size:10.5px; }
+.p-guard{ color:var(--soft); font-size:10.5px; margin-top:3px; }
+.p-body{ display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+.p-row{ display:flex; gap:8px; }
+.p-row .pl{ flex:0 0 44px; color:var(--soft); text-transform:uppercase;
+  font-size:9px; letter-spacing:.05em; padding-top:1px; }
+.p-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.p-chips .chip{ background:var(--band); border:1px solid var(--rule); border-radius:10px;
+  padding:1px 8px; font-size:10px; color:var(--ink); }
+.p-foot{ color:var(--soft); font-size:10px; margin-top:8px;
+  border-top:1px solid var(--rule); padding-top:6px; }
+
+@media (prefers-reduced-motion:reduce){
+  .msg, .msg .arrow.sync{ animation:none!important; stroke-dashoffset:0!important; opacity:1; }
+}
+</style>
+</head><body>
+<div class="app">
+  <header class="appbar">
+    <div class="brand"><span class="mark"><svg viewBox="0 0 160 140" aria-hidden="true"><g stroke="#897D58" stroke-width="2.6" stroke-dasharray="2 7" stroke-linecap="round"><line x1="26" y1="12" x2="26" y2="134"/><line x1="80" y1="12" x2="80" y2="134"/><line x1="134" y1="12" x2="134" y2="134"/></g><g stroke="#21201B" stroke-linecap="round"><line x1="31.5" y1="40" x2="74.5" y2="40" stroke-width="2.8"/><line x1="85.5" y1="72" x2="128.5" y2="72" stroke-width="2.8"/></g><line x1="128.5" y1="106" x2="31.5" y2="106" stroke="#21201B" stroke-width="2.6" stroke-dasharray="7 5" stroke-linecap="butt"/><rect x="20.5" y="28" width="11" height="86" rx="4" fill="#2E9D8F"/><rect x="74.5" y="30" width="11" height="54" rx="4" fill="#5E6CB0"/><rect x="128.5" y="62" width="11" height="52" rx="4" fill="#B0432F"/></svg></span><span>Blueprint</span></div>
+    <div class="crumb">
+      <span class="crumb-proj">DocAgent Compare</span>
+      <span class="crumb-sep">/</span>
+      <div class="switch">
+        <button class="switch-btn" id="switchBtn" aria-haspopup="true" aria-expanded="false">
+          <span class="switch-title" id="crumbTitle"></span>
+          <span class="switch-caret">▾</span>
+        </button>
+        <div class="switch-menu" id="switchMenu" hidden><button class="mitem active" data-target="paired-comparison"><span class="mi-title">Paired documentation comparison</span><span class="mi-sub">One prompt enters two isolated Flue conversations that differ only by classifier.</span></button><button class="mitem" data-target="follow-up-and-abort"><span class="mi-title">Follow-up and abort lifecycle</span><span class="mi-sub">Follow-ups reuse lane history; Stop aborts both durable submissions.</span></button></div>
+      </div>
+    </div>
+    <div class="barmeta"><span id="barCount"></span></div>
+  </header>
+  <main class="stage"><section class="card active" data-card="paired-comparison" data-title="Paired documentation comparison" data-sub="One prompt enters two isolated Flue conversations that differ only by classifier." data-updated="2026-09-22">
+  <div class="head"><svg class="seqhead" viewBox="0 0 1380 42" width="1380" height="42" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace"><rect x="0.0" y="0.0" width="30.0" height="42.0" rx="0" fill="#E6DECA" stroke="none" stroke-width="1.0"/><rect x="30.0" y="0.0" width="1350.0" height="42.0" rx="0" fill="#E7DEC8" stroke="none" stroke-width="1.0"/><line x1="30.0" y1="0.0" x2="30.0" y2="42.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="30.0" y1="23.0" x2="1380.0" y2="23.0" stroke="#C6BDA3" stroke-width="1.0"/><text x="126.4" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#807A71" text-anchor="middle" font-weight="700" dominant-baseline="middle">User</text><text x="126.4" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">browser operator</text><line x1="222.9" y1="0.0" x2="222.9" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="319.3" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#008B75" text-anchor="middle" font-weight="700" dominant-baseline="middle">React UI</text><text x="319.3" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">frontend/src/App.tsx</text><line x1="415.7" y1="0.0" x2="415.7" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="608.6" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#0080AC" text-anchor="middle" font-weight="700" dominant-baseline="middle">Flue agents</text><text x="512.1" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.5" fill="#2583AA" text-anchor="middle" font-weight="600" dominant-baseline="middle">Baseline DO</text><line x1="608.6" y1="23.0" x2="608.6" y2="42.0" stroke="#B4AA8C" stroke-width="0.8"/><text x="705.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.5" fill="#006287" text-anchor="middle" font-weight="600" dominant-baseline="middle">Jev DO</text><line x1="801.4" y1="0.0" x2="801.4" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="897.9" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#706BB5" text-anchor="middle" font-weight="700" dominant-baseline="middle">Worker</text><text x="897.9" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">Hono + Flue routers</text><line x1="994.3" y1="0.0" x2="994.3" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="1090.7" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#A05A8C" text-anchor="middle" font-weight="700" dominant-baseline="middle">Cloudflare AI</text><text x="1090.7" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">AI Gateway + Workers AI</text><line x1="1187.1" y1="0.0" x2="1187.1" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="1283.6" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#AE5B49" text-anchor="middle" font-weight="700" dominant-baseline="middle">Docs MCPs</text><text x="1283.6" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">Cloudflare Docs + AWS Knowledge</text></svg></div>
+  <div class="scroll" style="background-image:url('data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20preserveAspectRatio=%27none%27%20viewBox=%270%200%201380%2010%27%3E%3Cline%20x1=%27126.4%27%20y1=%270%27%20x2=%27126.4%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27319.3%27%20y1=%270%27%20x2=%27319.3%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27512.1%27%20y1=%270%27%20x2=%27512.1%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27705.0%27%20y1=%270%27%20x2=%27705.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27897.9%27%20y1=%270%27%20x2=%27897.9%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%271090.7%27%20y1=%270%27%20x2=%271090.7%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%271283.6%27%20y1=%270%27%20x2=%271283.6%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3C/svg%3E'),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100% 10px,23px 23px,23px 23px;background-repeat:repeat-y,repeat,repeat;"><div class="diagram lens-none"><svg class="seqbody" viewBox="0 42 1380 818" width="1380" height="818" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace"><defs><pattern id="grid-paired-comparison" width="23" height="23" patternUnits="userSpaceOnUse">
+           <path d="M 23 0 L 0 0 0 23" fill="none" stroke="#211E1408" stroke-width="1"/></pattern></defs><rect x="0.0" y="42.0" width="1380.0" height="818.0" rx="0" fill="#F3EEE1" stroke="none" stroke-width="1.0"/><rect x="0.0" y="42.0" width="1380.0" height="818.0" rx="0" fill="url(#grid-paired-comparison)" stroke="none" stroke-width="1.0"/><rect x="222.9" y="42.0" width="192.9" height="818.0" rx="0" fill="#7B73560F" stroke="none" stroke-width="1.0"/><line x1="222.9" y1="42.0" x2="222.9" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="415.7" y1="42.0" x2="415.7" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><rect x="801.4" y="42.0" width="192.9" height="818.0" rx="0" fill="#7B73560F" stroke="none" stroke-width="1.0"/><line x1="801.4" y1="42.0" x2="801.4" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="994.3" y1="42.0" x2="994.3" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><rect x="1187.1" y="42.0" width="192.9" height="818.0" rx="0" fill="#7B73560F" stroke="none" stroke-width="1.0"/><line x1="1187.1" y1="42.0" x2="1187.1" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="126.4" y1="42.0" x2="126.4" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="319.3" y1="42.0" x2="319.3" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="512.1" y1="42.0" x2="512.1" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="705.0" y1="42.0" x2="705.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="897.9" y1="42.0" x2="897.9" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="1090.7" y1="42.0" x2="1090.7" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="1283.6" y1="42.0" x2="1283.6" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><rect x="0.0" y="42.0" width="30.0" height="818.0" rx="0" fill="#E6DECA" stroke="none" stroke-width="1.0"/><line x1="30.0" y1="42.0" x2="30.0" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><text x="15.0" y="114.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 114.0)">CREATE</text><line x1="0.0" y1="186.0" x2="1380.0" y2="186.0" stroke="#9E9173" stroke-width="1.3"/><text x="15.0" y="323.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 323.0)">RUN</text><line x1="0.0" y1="460.0" x2="1380.0" y2="460.0" stroke="#9E9173" stroke-width="1.3"/><text x="15.0" y="660.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 660.0)">DISPLAY</text><rect x="303.3" y="244.0" width="996.3" height="348.0" rx="3" fill="none" stroke="#8A7E5C" stroke-width="1.3" stroke-dasharray="6 4" class="frame"/><rect x="303.3" y="244.0" width="32.1" height="15.0" rx="2" fill="#E2D9C0" stroke="#8A7E5C" stroke-width="1.2"/><text x="319.4" y="252.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="middle" font-weight="700" dominant-baseline="middle">par</text><text x="342.4" y="252.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="start" font-weight="400" dominant-baseline="middle">[paired lanes run concurrently]</text><rect x="894.9" y="116.0" width="6.0" height="38.0" rx="1.5" fill="#7F7ACE" stroke="#5B5894" stroke-width="0.8" class="bar"/><rect x="509.1" y="218.0" width="6.0" height="274.0" rx="1.5" fill="#30A8DA" stroke="#23799D" stroke-width="0.8" class="bar"/><rect x="702.0" y="276.0" width="6.0" height="254.0" rx="1.5" fill="#007DAD" stroke="#005A7D" stroke-width="0.8" class="bar"/><rect x="316.3" y="564.0" width="6.0" height="22.0" rx="1.5" fill="#009E85" stroke="#007260" stroke-width="0.8" class="bar"/><rect x="316.3" y="78.0" width="6.0" height="18.0" rx="1.5" fill="#009E85" stroke="#007260" stroke-width="0.8" class="bar"/><rect x="1087.7" y="314.0" width="6.0" height="18.0" rx="1.5" fill="#B6669F" stroke="#834972" stroke-width="0.8" class="bar"/><rect x="1087.7" y="352.0" width="6.0" height="18.0" rx="1.5" fill="#B6669F" stroke="#834972" stroke-width="0.8" class="bar"/><rect x="1280.6" y="390.0" width="6.0" height="18.0" rx="1.5" fill="#C66753" stroke="#8F4A3C" stroke-width="0.8" class="bar"/><rect x="1280.6" y="428.0" width="6.0" height="18.0" rx="1.5" fill="#C66753" stroke="#8F4A3C" stroke-width="0.8" class="bar"/><g class="msg p-comparison" style="--d:0.000s" data-full="submit question" data-route="User → React UI" data-phase="CREATE" data-step="1/12" data-src="frontend/src/App.tsx → submit()"><title>submit question</title><line class="arrow sync" x1="126.4" y1="78" x2="316.3" y2="78" stroke="#21201B" stroke-width="1.4" style="--len:189.9"/><path d="M316.3,78.0 L308.3,74.0 L308.3,82.0 Z" fill="#21201B" class="ah"/><text x="222.9" y="70.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">submit question</text></g><g class="msg p-comparison" style="--d:0.028s" data-full="POST /api/comparisons" data-route="React UI → Worker" data-phase="CREATE" data-step="2/12" data-why="Allocate two independent durable conversation identities for one experiment." data-sends="{ model }" data-fails="Returns 400 when the model is outside the registry." data-auth="none" data-src="App.submit() → src/app.ts"><title>POST /api/comparisons</title><line class="arrow sync" x1="319.3" y1="116" x2="894.9" y2="116" stroke="#21201B" stroke-width="1.4" style="--len:575.6"/><path d="M894.9,116.0 L886.9,112.0 L886.9,120.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M536.8,104.6 L539.2,108.0 L536.8,111.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M541.2,104.6 L544.6,108.0 L541.2,111.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="608.6" y="108.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">POST /api/comparisons</text><text x="608.6" y="124.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">selected model</text></g><g class="msg p-comparison" style="--d:0.056s" data-full="paired IDs" data-route="Worker → React UI" data-phase="CREATE" data-step="3/12" data-src="src/app.ts → App.submit()"><title>paired IDs</title><line class="arrow ret" x1="894.9" y1="154" x2="319.3" y2="154" stroke="#21201B" stroke-width="1.4" stroke-dasharray="5 4" style="--len:575.6"/><path d="M327.3,150.0 L319.3,154.0 L327.3,158.0" fill="none" stroke="#21201B" stroke-width="1.3" class="ah"/><g class="tmark"><path d="M568.4,142.6 L570.8,146.0 L568.4,149.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M572.8,142.6 L576.2,146.0 L572.8,149.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="608.6" y="146.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">paired IDs</text><text x="608.6" y="162.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">pairId + baseline + Jev</text></g><g class="msg p-comparison" style="--d:0.084s" data-full="send baseline turn" data-route="React UI → Flue agents / Baseline DO" data-phase="RUN" data-step="4/12" data-why="Start the control lane with an LLM routing decision." data-sends="user message envelope" data-ordering="parallel with Jev lane" data-src="App.executeRun() → Flue baseline router"><title>send baseline turn</title><line class="arrow sync" x1="319.3" y1="218" x2="509.1" y2="218" stroke="#21201B" stroke-width="1.4" style="--len:189.9"/><path d="M509.1,218.0 L501.1,214.0 L501.1,222.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M352.6,206.6 L355.0,210.0 L352.6,213.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M357.0,206.6 L360.4,210.0 L357.0,213.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="415.7" y="210.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">send baseline turn</text><text x="415.7" y="226.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">configured prompt + idempotency key</text></g><g class="msg p-comparison" style="--d:0.112s" data-full="send Jev turn" data-route="React UI → Flue agents / Jev DO" data-phase="RUN" data-frag="par · paired lanes run concurrently" data-step="5/12" data-why="Start the treatment lane with the same inputs and retrieval surface." data-sends="user message envelope" data-ordering="parallel with baseline lane" data-src="App.executeRun() → Flue Jev router"><title>send Jev turn</title><line class="arrow sync" x1="319.3" y1="276" x2="702.0" y2="276" stroke="#21201B" stroke-width="1.4" style="--len:382.7"/><path d="M702.0,276.0 L694.0,272.0 L694.0,280.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M463.4,264.6 L465.8,268.0 L463.4,271.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M467.8,264.6 L471.2,268.0 L467.8,271.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="512.1" y="268.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">send Jev turn</text><text x="512.1" y="284.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">same configured prompt</text></g><g class="msg p-comparison" style="--d:0.140s" data-full="classify with LLM" data-route="Flue agents / Baseline DO → Cloudflare AI" data-phase="RUN" data-frag="par · paired lanes run concurrently" data-step="6/12" data-why="Produce the control routing contract before answer generation." data-fails="A non-2xx response throws and fails the agent attempt." data-auth="Workers AI API token" data-src="research-agent.ts → classifyResearchQueryWithLlm()"><title>classify with LLM</title><line class="arrow sync" x1="515.1" y1="314" x2="1087.7" y2="314" stroke="#21201B" stroke-width="1.4" style="--len:572.6"/><path d="M1087.7,314.0 L1079.7,310.0 L1079.7,318.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M741.2,302.6 L743.6,306.0 L741.2,309.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M745.6,302.6 L749.0,306.0 L745.6,309.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="801.4" y="306.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">classify with LLM</text><text x="801.4" y="322.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">JSON schema, temperature 0</text></g><g class="msg p-comparison" style="--d:0.168s" data-full="classify with Jev" data-route="Flue agents / Jev DO → Cloudflare AI" data-phase="RUN" data-frag="par · paired lanes run concurrently" data-step="7/12" data-why="Produce the treatment routing contract before answer generation." data-fails="A non-2xx response throws and fails the agent attempt." data-auth="Workers AI API token" data-src="research-agent.ts → classifyResearchQueryWithJev()"><title>classify with Jev</title><line class="arrow sync" x1="708.0" y1="352" x2="1087.7" y2="352" stroke="#21201B" stroke-width="1.4" style="--len:379.7"/><path d="M1087.7,352.0 L1079.7,348.0 L1079.7,356.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M837.6,340.6 L840.0,344.0 L837.6,347.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M842.0,340.6 L845.4,344.0 L842.0,347.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="897.9" y="344.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">classify with Jev</text><text x="897.9" y="360.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">typesafe/jev questions</text></g><g class="msg p-comparison" style="--d:0.196s" data-full="search official docs" data-route="Flue agents / Baseline DO → Docs MCPs" data-phase="RUN" data-frag="par · paired lanes run concurrently" data-step="8/12" data-why="Ground the control answer in current first-party documentation." data-fails="MCP connections are optional; the model may answer with reduced evidence." data-src="research-agent.ts → useMcpConnection()"><title>search official docs</title><line class="arrow sync" x1="515.1" y1="390" x2="1280.6" y2="390" stroke="#21201B" stroke-width="1.4" style="--len:765.4"/><path d="M1280.6,390.0 L1272.6,386.0 L1272.6,394.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M829.0,378.6 L831.4,382.0 L829.0,385.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M833.4,378.6 L836.8,382.0 L833.4,385.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="897.9" y="382.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">search official docs</text><text x="897.9" y="398.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">source chosen by classifier signal</text></g><g class="msg p-comparison" style="--d:0.224s" data-full="search official docs" data-route="Flue agents / Jev DO → Docs MCPs" data-phase="RUN" data-frag="par · paired lanes run concurrently" data-step="9/12" data-why="Ground the treatment answer using the same available sources." data-fails="Routing and call budgets are prompt instructions, not enforced capabilities." data-src="research-agent.ts → useMcpConnection()"><title>search official docs</title><line class="arrow sync" x1="708.0" y1="428" x2="1280.6" y2="428" stroke="#21201B" stroke-width="1.4" style="--len:572.6"/><path d="M1280.6,428.0 L1272.6,424.0 L1272.6,432.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M925.4,416.6 L927.8,420.0 L925.4,423.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M929.8,416.6 L933.2,420.0 L929.8,423.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="994.3" y="420.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">search official docs</text><text x="994.3" y="436.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">same MCP surface</text></g><g class="msg p-comparison" style="--d:0.252s" data-full="stream control result" data-route="Flue agents / Baseline DO → React UI" data-phase="DISPLAY" data-frag="par · paired lanes run concurrently" data-step="10/12" data-src="useFlueAgent() → LaneCard"><title>stream control result</title><line class="arrow ret" x1="509.1" y1="492" x2="319.3" y2="492" stroke="#21201B" stroke-width="1.4" stroke-dasharray="5 4" style="--len:189.9"/><path d="M327.3,488.0 L319.3,492.0 L327.3,496.0" fill="none" stroke="#21201B" stroke-width="1.3" class="ah"/><g class="tmark"><path d="M344.0,480.6 L346.4,484.0 L344.0,487.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M348.4,480.6 L351.8,484.0 L348.4,487.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="415.7" y="484.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">stream control result</text><text x="415.7" y="500.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">answer + events + metadata</text></g><g class="msg p-comparison" style="--d:0.280s" data-full="stream treatment result" data-route="Flue agents / Jev DO → React UI" data-phase="DISPLAY" data-frag="par · paired lanes run concurrently" data-step="11/12" data-src="useFlueAgent() → LaneCard"><title>stream treatment result</title><line class="arrow ret" x1="702.0" y1="530" x2="319.3" y2="530" stroke="#21201B" stroke-width="1.4" stroke-dasharray="5 4" style="--len:382.7"/><path d="M327.3,526.0 L319.3,530.0 L327.3,534.0" fill="none" stroke="#21201B" stroke-width="1.3" class="ah"/><g class="tmark"><path d="M434.6,518.6 L437.0,522.0 L434.6,525.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M439.0,518.6 L442.4,522.0 L439.0,525.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="512.1" y="522.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">stream treatment result</text><text x="512.1" y="538.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">answer + events + metadata</text></g><g class="msg p-comparison" style="--d:0.308s" data-full="derive timing" data-type="self" data-route="React UI · self" data-phase="DISPLAY" data-frag="par · paired lanes run concurrently" data-step="12/12" data-src="frontend/src/App.tsx → laneResult()"><title>derive timing</title><path class="arrow self" d="M322.2857142857143,568 h20 v14 h-20" fill="none" stroke="#21201B" stroke-width="1.4"/><path d="M322.3,582.0 L330.3,578.0 L330.3,586.0 Z" fill="#21201B" class="ah"/><text x="350.3" y="570.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="start" font-weight="400" dominant-baseline="middle" class="mtx">derive timing</text><text x="350.3" y="582.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="start" font-weight="400" dominant-baseline="middle" class="mtx mcap">total − classifier − tools</text></g></svg></div></div>
+  <div class="toolbar">
+    <div class="lenses"><button class="lens on" data-lens="none">Neutral</button><button class="lens" data-lens="path-comparison">↪ comparison</button></div>
+    <div class="tb-right"><div class="legends"><div class="legend lg-none">solid&nbsp;→&nbsp;call &nbsp;·&nbsp; dashed&nbsp;→&nbsp;return &nbsp;·&nbsp; open&nbsp;tip&nbsp;→&nbsp;async &nbsp;·&nbsp; <svg width="14" height="11" style="vertical-align:-2px"><g class="tmark"><path d="M3.6,2.1 L6.0,5.5 L3.6,8.9" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M8.0,2.1 L11.4,5.5 L8.0,8.9" fill="none" stroke="#6B6657" stroke-width="1.2"/></g></svg>&nbsp;other&nbsp;service &nbsp;·&nbsp; <svg width="14" height="11" style="vertical-align:-2px"><g class="tmark"><path d="M3.6,2.8 V7.9 A3.4,1.4 0 0 0 10.4,7.9 V2.8" fill="none" stroke="#6B6657" stroke-width="1.1"/><ellipse cx="7.0" cy="2.8" rx="3.4" ry="1.4" fill="none" stroke="#6B6657" stroke-width="1.1"/></g></svg>&nbsp;data&nbsp;store &nbsp;·&nbsp; ▭&nbsp;active &nbsp;·&nbsp; click&nbsp;a&nbsp;row&nbsp;for&nbsp;detail</div><div class="legend lg-path-comparison" hidden><span class="sw" style="background:#B23A2E"></span> path “comparison” lit; rest dimmed</div></div><button class="png">⤓ PNG</button></div>
+  </div>
+</section>
+<section class="card" data-card="follow-up-and-abort" data-title="Follow-up and abort lifecycle" data-sub="Follow-ups reuse lane history; Stop aborts both durable submissions." data-updated="2026-09-22">
+  <div class="head"><svg class="seqhead" viewBox="0 0 1380 42" width="1380" height="42" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace"><rect x="0.0" y="0.0" width="30.0" height="42.0" rx="0" fill="#E6DECA" stroke="none" stroke-width="1.0"/><rect x="30.0" y="0.0" width="1350.0" height="42.0" rx="0" fill="#E7DEC8" stroke="none" stroke-width="1.0"/><line x1="30.0" y1="0.0" x2="30.0" y2="42.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="30.0" y1="23.0" x2="1380.0" y2="23.0" stroke="#C6BDA3" stroke-width="1.0"/><text x="165.0" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#807A71" text-anchor="middle" font-weight="700" dominant-baseline="middle">User</text><text x="165.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">browser operator</text><line x1="300.0" y1="0.0" x2="300.0" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="435.0" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#00898A" text-anchor="middle" font-weight="700" dominant-baseline="middle">React UI</text><text x="435.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">App state</text><line x1="570.0" y1="0.0" x2="570.0" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="840.0" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#706BB5" text-anchor="middle" font-weight="700" dominant-baseline="middle">Flue agents</text><text x="705.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.5" fill="#7370B3" text-anchor="middle" font-weight="600" dominant-baseline="middle">Baseline DO</text><line x1="840.0" y1="23.0" x2="840.0" y2="42.0" stroke="#B4AA8C" stroke-width="0.8"/><text x="975.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.5" fill="#534F8F" text-anchor="middle" font-weight="600" dominant-baseline="middle">Jev DO</text><line x1="1110.0" y1="0.0" x2="1110.0" y2="42.0" stroke="#B4AA8C" stroke-width="1.1"/><text x="1245.0" y="11.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="12" fill="#AE5861" text-anchor="middle" font-weight="700" dominant-baseline="middle">Browser storage</text><text x="1245.0" y="32.5" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10.0" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle">localStorage</text></svg></div>
+  <div class="scroll" style="background-image:url('data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20preserveAspectRatio=%27none%27%20viewBox=%270%200%201380%2010%27%3E%3Cline%20x1=%27165.0%27%20y1=%270%27%20x2=%27165.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27435.0%27%20y1=%270%27%20x2=%27435.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27705.0%27%20y1=%270%27%20x2=%27705.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%27975.0%27%20y1=%270%27%20x2=%27975.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3Cline%20x1=%271245.0%27%20y1=%270%27%20x2=%271245.0%27%20y2=%2710%27%20stroke=%27%23897D58%27%20stroke-width=%271.4%27%20stroke-dasharray=%271.5%203.5%27/%3E%3C/svg%3E'),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100% 10px,23px 23px,23px 23px;background-repeat:repeat-y,repeat,repeat;"><div class="diagram lens-none"><svg class="seqbody" viewBox="0 42 1380 818" width="1380" height="818" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace"><defs><pattern id="grid-follow-up-and-abort" width="23" height="23" patternUnits="userSpaceOnUse">
+           <path d="M 23 0 L 0 0 0 23" fill="none" stroke="#211E1408" stroke-width="1"/></pattern></defs><rect x="0.0" y="42.0" width="1380.0" height="818.0" rx="0" fill="#F3EEE1" stroke="none" stroke-width="1.0"/><rect x="0.0" y="42.0" width="1380.0" height="818.0" rx="0" fill="url(#grid-follow-up-and-abort)" stroke="none" stroke-width="1.0"/><rect x="300.0" y="42.0" width="270.0" height="818.0" rx="0" fill="#7B73560F" stroke="none" stroke-width="1.0"/><line x1="300.0" y1="42.0" x2="300.0" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="570.0" y1="42.0" x2="570.0" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><rect x="1110.0" y="42.0" width="270.0" height="818.0" rx="0" fill="#7B73560F" stroke="none" stroke-width="1.0"/><line x1="1110.0" y1="42.0" x2="1110.0" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><line x1="165.0" y1="42.0" x2="165.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="435.0" y1="42.0" x2="435.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="705.0" y1="42.0" x2="705.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="975.0" y1="42.0" x2="975.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><line x1="1245.0" y1="42.0" x2="1245.0" y2="860.0" stroke="#897D58" stroke-width="1.4" stroke-dasharray="1.5 3.5"/><rect x="0.0" y="42.0" width="30.0" height="818.0" rx="0" fill="#E6DECA" stroke="none" stroke-width="1.0"/><line x1="30.0" y1="42.0" x2="30.0" y2="860.0" stroke="#B4AA8C" stroke-width="1.0"/><text x="15.0" y="143.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 143.0)">FOLLOW-UP</text><line x1="0.0" y1="244.0" x2="1380.0" y2="244.0" stroke="#9E9173" stroke-width="1.3"/><text x="15.0" y="324.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 324.0)">STOP</text><line x1="0.0" y1="404.0" x2="1380.0" y2="404.0" stroke="#9E9173" stroke-width="1.3"/><text x="15.0" y="632.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#6B6657" text-anchor="middle" font-weight="700" dominant-baseline="middle" transform="rotate(-90 15.0 632.0)">PERSIST</text><rect x="149.0" y="180.0" width="842.0" height="109.0" rx="3" fill="none" stroke="#8A7E5C" stroke-width="1.3" stroke-dasharray="6 4" class="frame"/><rect x="149.0" y="180.0" width="32.1" height="15.0" rx="2" fill="#E2D9C0" stroke="#8A7E5C" stroke-width="1.2"/><text x="165.1" y="188.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="middle" font-weight="700" dominant-baseline="middle">par</text><text x="188.2" y="188.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="start" font-weight="400" dominant-baseline="middle">[both lane operations]</text><rect x="419.0" y="340.0" width="842.0" height="109.0" rx="3" fill="none" stroke="#8A7E5C" stroke-width="1.3" stroke-dasharray="6 4" class="frame"/><rect x="419.0" y="340.0" width="32.1" height="15.0" rx="2" fill="#E2D9C0" stroke="#8A7E5C" stroke-width="1.2"/><text x="435.1" y="348.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="middle" font-weight="700" dominant-baseline="middle">par</text><text x="458.1" y="348.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="10" fill="#8A7E5C" text-anchor="start" font-weight="400" dominant-baseline="middle">[best-effort paired abort]</text><rect x="432.0" y="112.0" width="6.0" height="22.0" rx="1.5" fill="#009C9D" stroke="#007071" stroke-width="0.8" class="bar"/><rect x="432.0" y="78.0" width="6.0" height="18.0" rx="1.5" fill="#009C9D" stroke="#007071" stroke-width="0.8" class="bar"/><rect x="432.0" y="276.0" width="6.0" height="18.0" rx="1.5" fill="#009C9D" stroke="#007071" stroke-width="0.8" class="bar"/><rect x="702.0" y="154.0" width="6.0" height="18.0" rx="1.5" fill="#948FE5" stroke="#6B67A5" stroke-width="0.8" class="bar"/><rect x="702.0" y="314.0" width="6.0" height="18.0" rx="1.5" fill="#948FE5" stroke="#6B67A5" stroke-width="0.8" class="bar"/><rect x="972.0" y="212.0" width="6.0" height="18.0" rx="1.5" fill="#6B65B7" stroke="#4D4984" stroke-width="0.8" class="bar"/><rect x="972.0" y="372.0" width="6.0" height="18.0" rx="1.5" fill="#6B65B7" stroke="#4D4984" stroke-width="0.8" class="bar"/><rect x="1242.0" y="436.0" width="6.0" height="18.0" rx="1.5" fill="#C6646E" stroke="#8F484F" stroke-width="0.8" class="bar"/><g class="msg" style="--d:0.000s" data-full="submit follow-up" data-route="User → React UI" data-phase="FOLLOW-UP" data-step="1/8" data-src="App.submit()"><title>submit follow-up</title><line class="arrow sync" x1="165.0" y1="78" x2="432.0" y2="78" stroke="#21201B" stroke-width="1.4" style="--len:267.0"/><path d="M432.0,78.0 L424.0,74.0 L424.0,82.0 Z" fill="#21201B" class="ah"/><text x="300.0" y="70.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">submit follow-up</text></g><g class="msg p-follow-up" style="--d:0.028s" data-full="reuse paired IDs" data-type="self" data-route="React UI · self" data-phase="FOLLOW-UP" data-step="2/8" data-why="Continue each lane&#x27;s durable transcript without creating a new pair." data-effects="Appends the prompt to both histories, which may already differ." data-ordering="after prior run completes" data-src="frontend/src/App.tsx → submit()"><title>reuse paired IDs</title><path class="arrow self" d="M438.0,116 h20 v14 h-20" fill="none" stroke="#21201B" stroke-width="1.4"/><path d="M438.0,130.0 L446.0,126.0 L446.0,134.0 Z" fill="#21201B" class="ah"/><text x="466.0" y="118.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="start" font-weight="400" dominant-baseline="middle" class="mtx">reuse paired IDs</text><text x="466.0" y="130.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="start" font-weight="400" dominant-baseline="middle" class="mtx mcap">new turnId, existing…</text></g><g class="msg p-follow-up" style="--d:0.056s" data-full="send next turn" data-route="React UI → Flue agents / Baseline DO" data-phase="FOLLOW-UP" data-step="3/8" data-src="App.executeRun()"><title>send next turn</title><line class="arrow sync" x1="435.0" y1="154" x2="702.0" y2="154" stroke="#21201B" stroke-width="1.4" style="--len:267.0"/><path d="M702.0,154.0 L694.0,150.0 L694.0,158.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M518.4,142.6 L520.8,146.0 L518.4,149.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M522.8,142.6 L526.2,146.0 L522.8,149.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="570.0" y="146.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">send next turn</text></g><g class="msg p-follow-up" style="--d:0.084s" data-full="send next turn" data-route="React UI → Flue agents / Jev DO" data-phase="FOLLOW-UP" data-frag="par · both lane operations" data-step="4/8" data-src="App.executeRun()"><title>send next turn</title><line class="arrow sync" x1="435.0" y1="212" x2="972.0" y2="212" stroke="#21201B" stroke-width="1.4" style="--len:537.0"/><path d="M972.0,212.0 L964.0,208.0 L964.0,216.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M653.4,200.6 L655.8,204.0 L653.4,207.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M657.8,200.6 L661.2,204.0 L657.8,207.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="705.0" y="204.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">send next turn</text></g><g class="msg" style="--d:0.112s" data-full="click Stop run" data-route="User → React UI" data-phase="STOP" data-frag="par · both lane operations" data-step="5/8" data-src="App.stop()"><title>click Stop run</title><line class="arrow sync" x1="165.0" y1="276" x2="432.0" y2="276" stroke="#21201B" stroke-width="1.4" style="--len:267.0"/><path d="M432.0,276.0 L424.0,272.0 L424.0,280.0 Z" fill="#21201B" class="ah"/><text x="300.0" y="268.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">click Stop run</text></g><g class="msg p-abort" style="--d:0.140s" data-full="abort submission" data-route="React UI → Flue agents / Baseline DO" data-phase="STOP" data-step="6/8" data-why="Request cancellation of the active control execution." data-fails="The UI reports the first abort failure." data-src="App.stop() → createFlueClient().abort()"><title>abort submission</title><line class="arrow sync" x1="435.0" y1="314" x2="702.0" y2="314" stroke="#21201B" stroke-width="1.4" style="--len:267.0"/><path d="M702.0,314.0 L694.0,310.0 L694.0,318.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M512.6,302.6 L515.0,306.0 L512.6,309.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M517.0,302.6 L520.4,306.0 L517.0,309.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="570.0" y="306.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">abort submission</text></g><g class="msg p-abort" style="--d:0.168s" data-full="abort submission" data-route="React UI → Flue agents / Jev DO" data-phase="STOP" data-frag="par · best-effort paired abort" data-step="7/8" data-why="Request cancellation of the active treatment execution." data-fails="Local phase recovery depends on outstanding waits settling." data-src="App.stop() → createFlueClient().abort()"><title>abort submission</title><line class="arrow sync" x1="435.0" y1="372" x2="972.0" y2="372" stroke="#21201B" stroke-width="1.4" style="--len:537.0"/><path d="M972.0,372.0 L964.0,368.0 L964.0,376.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M647.6,360.6 L650.0,364.0 L647.6,367.4" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M652.0,360.6 L655.4,364.0 L652.0,367.4" fill="none" stroke="#6B6657" stroke-width="1.2"/></g><text x="705.0" y="364.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">abort submission</text></g><g class="msg p-follow-up" style="--d:0.196s" data-full="write latest result" data-route="React UI → Browser storage" data-phase="PERSIST" data-frag="par · best-effort paired abort" data-step="8/8" data-why="Retain the latest completed comparison in the browser." data-effects="Overwrites one local result snapshot; current code never restores it." data-src="App useEffect() → localStorage"><title>write latest result</title><line class="arrow sync" x1="435.0" y1="436" x2="1242.0" y2="436" stroke="#21201B" stroke-width="1.4" style="--len:807.0"/><path d="M1242.0,436.0 L1234.0,432.0 L1234.0,440.0 Z" fill="#21201B" class="ah"/><g class="tmark"><path d="M774.0,425.3 V430.4 A3.4,1.4 0 0 0 780.8,430.4 V425.3" fill="none" stroke="#6B6657" stroke-width="1.1"/><ellipse cx="777.4" cy="425.3" rx="3.4" ry="1.4" fill="none" stroke="#6B6657" stroke-width="1.1"/></g><text x="840.0" y="428.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="9.5" fill="#21201B" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx">write latest result</text><text x="840.0" y="444.0" font-family="'JetBrains Mono','SF Mono',ui-monospace,'Menlo','DejaVu Sans Mono',monospace" font-size="8.5" fill="#6B6657" text-anchor="middle" font-weight="400" dominant-baseline="middle" class="mtx mcap">model + answers + timings</text></g></svg></div></div>
+  <div class="toolbar">
+    <div class="lenses"><button class="lens on" data-lens="none">Neutral</button><button class="lens" data-lens="path-follow-up">↪ follow-up</button><button class="lens" data-lens="path-abort">↪ abort</button></div>
+    <div class="tb-right"><div class="legends"><div class="legend lg-none">solid&nbsp;→&nbsp;call &nbsp;·&nbsp; dashed&nbsp;→&nbsp;return &nbsp;·&nbsp; open&nbsp;tip&nbsp;→&nbsp;async &nbsp;·&nbsp; <svg width="14" height="11" style="vertical-align:-2px"><g class="tmark"><path d="M3.6,2.1 L6.0,5.5 L3.6,8.9" fill="none" stroke="#6B6657" stroke-width="1.2"/><path d="M8.0,2.1 L11.4,5.5 L8.0,8.9" fill="none" stroke="#6B6657" stroke-width="1.2"/></g></svg>&nbsp;other&nbsp;service &nbsp;·&nbsp; <svg width="14" height="11" style="vertical-align:-2px"><g class="tmark"><path d="M3.6,2.8 V7.9 A3.4,1.4 0 0 0 10.4,7.9 V2.8" fill="none" stroke="#6B6657" stroke-width="1.1"/><ellipse cx="7.0" cy="2.8" rx="3.4" ry="1.4" fill="none" stroke="#6B6657" stroke-width="1.1"/></g></svg>&nbsp;data&nbsp;store &nbsp;·&nbsp; ▭&nbsp;active &nbsp;·&nbsp; click&nbsp;a&nbsp;row&nbsp;for&nbsp;detail</div><div class="legend lg-path-follow-up" hidden><span class="sw" style="background:#B23A2E"></span> path “follow-up” lit; rest dimmed</div><div class="legend lg-path-abort" hidden><span class="sw" style="background:#B23A2E"></span> path “abort” lit; rest dimmed</div></div><button class="png">⤓ PNG</button></div>
+  </div>
+</section></main>
+</div>
+<div id="pop" class="popover" hidden></div>
+<script>(function(){
+  "use strict";
+  var pop = document.getElementById('pop');
+  function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ── scenario switcher (dropdown in the header) ──────────────────────────────
+  var cards     = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var mitems    = Array.prototype.slice.call(document.querySelectorAll('.mitem'));
+  var menu      = document.getElementById('switchMenu');
+  var switchBtn = document.getElementById('switchBtn');
+  var crumbTitle= document.getElementById('crumbTitle');
+  var barCount  = document.getElementById('barCount');
+
+  function closeMenu(){ if(menu){ menu.hidden = true; } if(switchBtn){ switchBtn.setAttribute('aria-expanded','false'); } }
+  function select(sid){
+    var card = null;
+    cards.forEach(function(c){ var on = c.dataset.card === sid; c.classList.toggle('active', on); if(on) card = c; });
+    mitems.forEach(function(m){ m.classList.toggle('active', m.dataset.target === sid); });
+    if(card && crumbTitle) crumbTitle.textContent = card.dataset.title || '';
+    closeMenu(); pop.hidden = true;
+  }
+  mitems.forEach(function(m){
+    m.addEventListener('click', function(e){ e.stopPropagation(); select(m.dataset.target); });
+  });
+
+  if(barCount) barCount.textContent = cards.length + (cards.length === 1 ? ' scenario' : ' scenarios');
+  var act = document.querySelector('.card.active') || cards[0];
+  if(act) select(act.dataset.card);
+
+  // open/close the dropdown
+  if(switchBtn && menu && mitems.length){
+    switchBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var open = menu.hidden;
+      menu.hidden = !open;
+      switchBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu(); });
+  }
+
+  // keyboard: ↑/↓ or j/k to cycle scenarios
+  document.addEventListener('keydown', function(e){
+    if(cards.length < 2) return;
+    if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    var dir = (e.key === 'ArrowDown' || e.key === 'j') ? 1
+            : (e.key === 'ArrowUp'   || e.key === 'k') ? -1 : 0;
+    if(!dir) return;
+    var ai = cards.findIndex(function(c){ return c.classList.contains('active'); });
+    var nx = Math.max(0, Math.min(cards.length - 1, (ai < 0 ? 0 : ai) + dir));
+    select(cards[nx].dataset.card); e.preventDefault();
+  });
+
+  // ── colour lens (per card; one active at a time) ──────────────────────────
+  function setLens(card, lens){
+    var dia = card.querySelector('.diagram');
+    dia.className = 'diagram';
+    card.querySelectorAll('.msg.lit').forEach(function(m){ m.classList.remove('lit'); });
+    card.querySelectorAll('.legend').forEach(function(l){ l.hidden = true; });
+    var lg;
+    if(lens === 'none'){ dia.classList.add('lens-none'); lg = card.querySelector('.lg-none'); }
+    else if(lens.indexOf('path-') === 0){
+      dia.classList.add('lens-path');
+      card.querySelectorAll('.msg.p-' + lens.slice(5)).forEach(function(m){ m.classList.add('lit'); });
+      lg = card.querySelector('.lg-' + lens);
+    }
+    else if(lens === 'cost'){ dia.classList.add('lens-cost'); lg = card.querySelector('.lg-cost'); }
+    else if(lens === 'lat'){ dia.classList.add('lens-lat'); lg = card.querySelector('.lg-lat'); }
+    if(lg) lg.hidden = false;
+    card.querySelectorAll('.lens').forEach(function(b){ b.classList.toggle('on', b.dataset.lens === lens); });
+  }
+
+  // ── in-browser PNG export — stitch header + body SVGs onto one canvas ──────
+  function svgImg(svg){
+    return new Promise(function(res){
+      var img = new Image();
+      img.onload = function(){ res(img); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' +
+                encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    });
+  }
+  function exportPNG(card){
+    var hs = card.querySelector('.head svg'), bs = card.querySelector('.scroll svg');
+    var W = +hs.getAttribute('width'), HH = +hs.getAttribute('height'), BH = +bs.getAttribute('height');
+    var sc = 2, cv = document.createElement('canvas');
+    cv.width = W * sc; cv.height = (HH + BH) * sc;
+    var cx = cv.getContext('2d'); cx.scale(sc, sc);
+    Promise.all([svgImg(hs), svgImg(bs)]).then(function(imgs){
+      cx.drawImage(imgs[0], 0, 0);
+      cx.drawImage(imgs[1], 0, HH);
+      var a = document.createElement('a');
+      a.download = (card.dataset.card || 'diagram') + '.png';
+      a.href = cv.toDataURL('image/png'); a.click();
+    });
+  }
+
+  // ── wire each card (lenses, export, hover-dim) ─────────────────────────────
+  cards.forEach(function(card){
+    var pngBtn = card.querySelector('.png');
+    if(pngBtn) pngBtn.addEventListener('click', function(){ exportPNG(card); });
+    card.querySelectorAll('.lens').forEach(function(b){
+      b.addEventListener('click', function(){ setLens(card, b.dataset.lens); });
+    });
+    var dia = card.querySelector('.diagram');
+    dia.addEventListener('mouseover', function(e){
+      var g = e.target.closest('.msg'); if(g){ dia.classList.add('hov'); g.classList.add('hl'); }
+    });
+    dia.addEventListener('mouseout', function(e){
+      var g = e.target.closest('.msg');
+      if(g){ g.classList.remove('hl'); if(!dia.querySelector('.msg.hl')) dia.classList.remove('hov'); }
+    });
+  });
+
+  // ── click-a-message detail card ────────────────────────────────────────────
+  // Tiers: WHY headline · readable route/step/phase sub-line · guard · prose body
+  // (what-changes / on-failure) · fact chips (sends/auth/ordering/cost) · src+age footer.
+  // Header + footer are deterministic; the body shows only the AI `detail` keys present.
+  function row(label, val){
+    return '<div class="p-row"><span class="pl">' + esc(label) + '</span><span>' + esc(val) + '</span></div>';
+  }
+  function chip(val){ return '<span class="chip">' + esc(val) + '</span>'; }
+  function buildCard(g){
+    var d = g.dataset, h = '';
+    // headline = the WHY; with no detail, lead with the readable route (a normal arrow) or the
+    // label itself (self/note, where the label is the substance) — never repeat a normal arrow's label.
+    var contentLed = (d.type === 'note' || d.type === 'self');
+    var head = d.why || (contentLed ? d.full : d.route) || d.full || '(message)';
+    h += '<div class="p-why">' + esc(head) + '</div>';
+    var sub = [];
+    if(d.route && d.route !== head) sub.push(d.route);
+    if(d.step)  sub.push('step ' + d.step);
+    if(d.phase) sub.push(d.phase);
+    if(sub.length) h += '<div class="p-route">' + esc(sub.join('  ·  ')) + '</div>';
+    if(d.frag) h += '<div class="p-guard">⋔ ' + esc(d.frag) + '</div>';
+    var body = '';
+    if(d.effects) body += row('Changes', d.effects);
+    if(d.fails)   body += row('On fail', d.fails);
+    if(body) h += '<div class="p-body">' + body + '</div>';
+    var chips = '';
+    if(d.sends)    chips += chip(d.sends);
+    if(d.auth)     chips += chip(d.auth);
+    if(d.ordering) chips += chip(d.ordering);
+    if(d.metrics)  chips += chip(d.metrics);
+    if(chips) h += '<div class="p-chips">' + chips + '</div>';
+    var foot = [];
+    if(d.src) foot.push(d.src);
+    var card = g.closest('.card'), age = card && card.dataset.updated;
+    if(age) foot.push(age);                                   // research age → staleness + AI-derived signal
+    if(foot.length) h += '<div class="p-foot">' + esc(foot.join('  ·  ')) + '</div>';
+    return h;
+  }
+  document.addEventListener('click', function(e){
+    if(pop.contains(e.target)) return;                        // clicks INSIDE the card never dismiss it
+    var g = e.target.closest('.msg');
+    if(!g){ pop.hidden = true; return; }
+    pop.classList.remove('docked');
+    pop.innerHTML = buildCard(g);
+    pop.hidden = false;
+    pop.style.left = '0px'; pop.style.top = '0px';            // measure at a known origin
+    if(pop.offsetHeight > innerHeight - 24){                  // too tall to float → dock + scroll
+      pop.classList.add('docked'); return;
+    }
+    var x = Math.max(8, Math.min(e.clientX + 12, innerWidth - pop.offsetWidth - 8));
+    var y = Math.max(8, Math.min(e.clientY + 12, innerHeight - pop.offsetHeight - 8));
+    pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') pop.hidden = true; });
+})();
+</script>
+</body></html>

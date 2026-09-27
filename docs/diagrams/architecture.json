@@ -1,0 +1,416 @@
+{
+  "project": "DocAgent Compare",
+  "scenarios": [
+    {
+      "id": "paired-comparison",
+      "title": "Paired documentation comparison",
+      "subtitle": "One prompt enters two isolated Flue conversations that differ only by classifier.",
+      "meta": {
+        "created": "2026-09-22",
+        "updated": "2026-09-22",
+        "status": "current"
+      },
+      "actors": [
+        {
+          "id": "user",
+          "label": "User",
+          "zone": "user",
+          "sub_caption": "browser operator"
+        },
+        {
+          "id": "ui",
+          "label": "React UI",
+          "zone": "frontend",
+          "sub_caption": "frontend/src/App.tsx"
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "zone": "worker",
+          "sub_caption": "Hono + Flue routers"
+        },
+        {
+          "id": "agents",
+          "label": "Flue agents",
+          "kind": "internal",
+          "zone": "server",
+          "sub": [
+            {
+              "id": "baseline",
+              "label": "Baseline DO"
+            },
+            {
+              "id": "jev",
+              "label": "Jev DO"
+            }
+          ]
+        },
+        {
+          "id": "ai",
+          "label": "Cloudflare AI",
+          "zone": "external",
+          "sub_caption": "AI Gateway + Workers AI"
+        },
+        {
+          "id": "docs",
+          "label": "Docs MCPs",
+          "zone": "external",
+          "sub_caption": "Cloudflare Docs + AWS Knowledge"
+        }
+      ],
+      "messages": [
+        {
+          "phase": "CREATE"
+        },
+        {
+          "from": "user",
+          "to": "ui",
+          "text": "submit question",
+          "paths": [
+            "comparison"
+          ],
+          "src": "frontend/src/App.tsx \u2192 submit()"
+        },
+        {
+          "from": "ui",
+          "to": "worker",
+          "text": "POST /api/comparisons",
+          "caption": "selected model",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "App.submit() \u2192 src/app.ts",
+          "detail": {
+            "why": "Allocate two independent durable conversation identities for one experiment.",
+            "sends": "{ model }",
+            "auth": "none",
+            "fails": "Returns 400 when the model is outside the registry."
+          }
+        },
+        {
+          "from": "worker",
+          "to": "ui",
+          "text": "paired IDs",
+          "caption": "pairId + baseline + Jev",
+          "kind": "ret",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "src/app.ts \u2192 App.submit()"
+        },
+        {
+          "phase": "RUN"
+        },
+        {
+          "from": "ui",
+          "to": "agents.baseline",
+          "text": "send baseline turn",
+          "caption": "configured prompt + idempotency key",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "App.executeRun() \u2192 Flue baseline router",
+          "detail": {
+            "why": "Start the control lane with an LLM routing decision.",
+            "sends": "user message envelope",
+            "ordering": "parallel with Jev lane"
+          }
+        },
+        {
+          "from": "ui",
+          "to": "agents.jev",
+          "text": "send Jev turn",
+          "caption": "same configured prompt",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "App.executeRun() \u2192 Flue Jev router",
+          "detail": {
+            "why": "Start the treatment lane with the same inputs and retrieval surface.",
+            "sends": "user message envelope",
+            "ordering": "parallel with baseline lane"
+          }
+        },
+        {
+          "from": "agents.baseline",
+          "to": "ai",
+          "text": "classify with LLM",
+          "caption": "JSON schema, temperature 0",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "research-agent.ts \u2192 classifyResearchQueryWithLlm()",
+          "detail": {
+            "why": "Produce the control routing contract before answer generation.",
+            "auth": "Workers AI API token",
+            "fails": "A non-2xx response throws and fails the agent attempt."
+          }
+        },
+        {
+          "from": "agents.jev",
+          "to": "ai",
+          "text": "classify with Jev",
+          "caption": "typesafe/jev questions",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "research-agent.ts \u2192 classifyResearchQueryWithJev()",
+          "detail": {
+            "why": "Produce the treatment routing contract before answer generation.",
+            "auth": "Workers AI API token",
+            "fails": "A non-2xx response throws and fails the agent attempt."
+          }
+        },
+        {
+          "from": "agents.baseline",
+          "to": "docs",
+          "text": "search official docs",
+          "caption": "source chosen by classifier signal",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "research-agent.ts \u2192 useMcpConnection()",
+          "detail": {
+            "why": "Ground the control answer in current first-party documentation.",
+            "fails": "MCP connections are optional; the model may answer with reduced evidence."
+          }
+        },
+        {
+          "from": "agents.jev",
+          "to": "docs",
+          "text": "search official docs",
+          "caption": "same MCP surface",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "research-agent.ts \u2192 useMcpConnection()",
+          "detail": {
+            "why": "Ground the treatment answer using the same available sources.",
+            "fails": "Routing and call budgets are prompt instructions, not enforced capabilities."
+          }
+        },
+        {
+          "phase": "DISPLAY"
+        },
+        {
+          "from": "agents.baseline",
+          "to": "ui",
+          "text": "stream control result",
+          "caption": "answer + events + metadata",
+          "kind": "ret",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "useFlueAgent() \u2192 LaneCard"
+        },
+        {
+          "from": "agents.jev",
+          "to": "ui",
+          "text": "stream treatment result",
+          "caption": "answer + events + metadata",
+          "kind": "ret",
+          "via": "api",
+          "paths": [
+            "comparison"
+          ],
+          "src": "useFlueAgent() \u2192 LaneCard"
+        },
+        {
+          "self": "ui",
+          "text": "derive timing",
+          "caption": "total \u2212 classifier \u2212 tools",
+          "paths": [
+            "comparison"
+          ],
+          "src": "frontend/src/App.tsx \u2192 laneResult()"
+        }
+      ],
+      "fragments": [
+        {
+          "kind": "par",
+          "label": "paired lanes run concurrently",
+          "range": [
+            4,
+            11
+          ]
+        }
+      ]
+    },
+    {
+      "id": "follow-up-and-abort",
+      "title": "Follow-up and abort lifecycle",
+      "subtitle": "Follow-ups reuse lane history; Stop aborts both durable submissions.",
+      "meta": {
+        "created": "2026-09-22",
+        "updated": "2026-09-22",
+        "status": "current"
+      },
+      "actors": [
+        {
+          "id": "user",
+          "label": "User",
+          "zone": "user",
+          "sub_caption": "browser operator"
+        },
+        {
+          "id": "ui",
+          "label": "React UI",
+          "zone": "frontend",
+          "sub_caption": "App state"
+        },
+        {
+          "id": "agents",
+          "label": "Flue agents",
+          "kind": "internal",
+          "zone": "server",
+          "sub": [
+            {
+              "id": "baseline",
+              "label": "Baseline DO"
+            },
+            {
+              "id": "jev",
+              "label": "Jev DO"
+            }
+          ]
+        },
+        {
+          "id": "browser",
+          "label": "Browser storage",
+          "zone": "external",
+          "sub_caption": "localStorage"
+        }
+      ],
+      "messages": [
+        {
+          "phase": "FOLLOW-UP"
+        },
+        {
+          "from": "user",
+          "to": "ui",
+          "text": "submit follow-up",
+          "src": "App.submit()"
+        },
+        {
+          "self": "ui",
+          "text": "reuse paired IDs",
+          "caption": "new turnId, existing histories",
+          "paths": [
+            "follow-up"
+          ],
+          "src": "frontend/src/App.tsx \u2192 submit()",
+          "detail": {
+            "why": "Continue each lane's durable transcript without creating a new pair.",
+            "effects": "Appends the prompt to both histories, which may already differ.",
+            "ordering": "after prior run completes"
+          }
+        },
+        {
+          "from": "ui",
+          "to": "agents.baseline",
+          "text": "send next turn",
+          "via": "api",
+          "paths": [
+            "follow-up"
+          ],
+          "src": "App.executeRun()"
+        },
+        {
+          "from": "ui",
+          "to": "agents.jev",
+          "text": "send next turn",
+          "via": "api",
+          "paths": [
+            "follow-up"
+          ],
+          "src": "App.executeRun()"
+        },
+        {
+          "phase": "STOP"
+        },
+        {
+          "from": "user",
+          "to": "ui",
+          "text": "click Stop run",
+          "src": "App.stop()"
+        },
+        {
+          "from": "ui",
+          "to": "agents.baseline",
+          "text": "abort submission",
+          "via": "api",
+          "paths": [
+            "abort"
+          ],
+          "src": "App.stop() \u2192 createFlueClient().abort()",
+          "detail": {
+            "why": "Request cancellation of the active control execution.",
+            "fails": "The UI reports the first abort failure."
+          }
+        },
+        {
+          "from": "ui",
+          "to": "agents.jev",
+          "text": "abort submission",
+          "via": "api",
+          "paths": [
+            "abort"
+          ],
+          "src": "App.stop() \u2192 createFlueClient().abort()",
+          "detail": {
+            "why": "Request cancellation of the active treatment execution.",
+            "fails": "Local phase recovery depends on outstanding waits settling."
+          }
+        },
+        {
+          "phase": "PERSIST"
+        },
+        {
+          "from": "ui",
+          "to": "browser",
+          "text": "write latest result",
+          "caption": "model + answers + timings",
+          "via": "io",
+          "paths": [
+            "follow-up"
+          ],
+          "src": "App useEffect() \u2192 localStorage",
+          "detail": {
+            "why": "Retain the latest completed comparison in the browser.",
+            "effects": "Overwrites one local result snapshot; current code never restores it."
+          }
+        }
+      ],
+      "fragments": [
+        {
+          "kind": "par",
+          "label": "both lane operations",
+          "range": [
+            3,
+            4
+          ]
+        },
+        {
+          "kind": "par",
+          "label": "best-effort paired abort",
+          "range": [
+            6,
+            7
+          ]
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "git_sha": "37ec52b76f28348726c4f29be652d10348f949a2"
+  }
+}
