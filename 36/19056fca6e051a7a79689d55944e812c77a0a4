@@ -1,0 +1,25 @@
+README.md
+  s_0f5c0cb3f09492::t_99b3ce8440873f 3,5-15,17,21-38,42,47,49-60,66-67,70,85,87-90,92,94-97,99-104
+docs/diagrams/architecture.json
+  s_0f5c0cb3f09492::t_b8d220f7b3dd45 1-416
+docs/diagrams/index.html
+  s_0f5c0cb3f09492::t_04fe70e4fe0282 1-359
+docs/docagent-compare-learning-guide.html
+  s_0f5c0cb3f09492::t_3c81d560c56c2c 1-907
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3619056fca6e051a7a79689d55944e812c77a0a4",
+  "prompts": {},
+  "sessions": {
+    "s_0f5c0cb3f09492": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f3a175c2dffe2e2Sf6Df76UwNr",
+        "model": "gpt-5.6"
+      },
+      "human_author": "oskarcode <manaskarsanqu@gmail.com>"
+    }
+  }
+}
