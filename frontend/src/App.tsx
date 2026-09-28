@@ -85,35 +85,15 @@ function latestAnswer(messages: FlueConversationMessage[]) {
   return visibleMessages(messages).findLast((message) => messageText(message).trim() || messageTrace(message).length > 0);
 }
 
-function laneResult(message: FlueConversationMessage | undefined, lane?: 'baseline' | 'jev') {
+function laneResult(message: FlueConversationMessage | undefined) {
   if (!message) return null;
-  const trace = messageTrace(message);
   const toolParts = message.parts.filter((part) => part.type === 'dynamic-tool');
   const sourceParts = toolParts.filter((part) => part.type === 'dynamic-tool' && part.toolName.startsWith('mcp__'));
   const metadata = message.metadata ?? {};
-  const routingLabel = lane === 'jev' ? 'Jev routing decision' : 'LLM routing decision';
-  const routingDecision = trace.find((item) => item.label === routingLabel)?.detail ?? null;
-  const classifierIndex = message.parts.findIndex((part) => part.type === 'data-routing-classification');
-  const classifierPart = message.parts[classifierIndex];
+  const classifierPart = message.parts.find((part) => part.type === 'data-routing-classification');
   const classifierData = classifierPart?.type === 'data-routing-classification' && classifierPart.data && typeof classifierPart.data === 'object'
     ? classifierPart.data as Record<string, unknown>
     : null;
-  const classifierStartedCorrectly = classifierData?.state === 'complete'
-    && classifierData.engine === (lane === 'jev' ? 'jev' : 'llm')
-    && message.parts.every((part, index) => !(
-      part.type === 'dynamic-tool'
-      && part.toolName.startsWith('mcp__')
-      && index < classifierIndex
-    ));
-  const routeStoppedCorrectly = routingDecision?.includes('Route: clarification') || routingDecision?.includes('Route: out_of_scope')
-    ? sourceParts.length === 0
-    : true;
-  const vendorUsedCorrectly = routingDecision?.includes('Vendor: cloudflare')
-    ? sourceParts.every((part) => part.type === 'dynamic-tool' && part.toolName.startsWith('mcp__cloudflare-docs__'))
-    : routingDecision?.includes('Vendor: aws')
-      ? sourceParts.every((part) => part.type === 'dynamic-tool' && part.toolName.startsWith('mcp__aws-knowledge__'))
-      : true;
-  const callBudgetValid = sourceParts.length <= (routingDecision?.includes('Vendor: cross_vendor') ? 4 : 2);
   const elapsedMs = typeof metadata.elapsedMs === 'number' ? metadata.elapsedMs : null;
   const classificationMs = typeof classifierData?.durationMs === 'number' ? classifierData.durationMs : 0;
   const toolsMs = toolParts.reduce((total, part) => total + (typeof part.durationMs === 'number' ? part.durationMs : 0), 0);
@@ -125,8 +105,6 @@ function laneResult(message: FlueConversationMessage | undefined, lane?: 'baseli
     modelMs: elapsedMs === null ? null : Math.max(0, elapsedMs - classificationMs - toolsMs),
     toolCalls: toolParts.length + (classifierData ? 1 : 0),
     sourceCalls: sourceParts.length,
-    routingDecision,
-    protocolValid: Boolean(classifierStartedCorrectly && routingDecision && routeStoppedCorrectly && vendorUsedCorrectly && callBudgetValid),
     usage: metadata.usage ?? null,
   };
 }
@@ -238,7 +216,7 @@ function LaneCard({
     (item.role === 'user' && visibleUserPrompt(item).trim())
     || (item.role === 'assistant' && turnNumbers.has(item.id))
   ));
-  const result = laneResult(message, lane);
+  const result = laneResult(message);
   const running = active || status === 'connecting' || status === 'submitted' || status === 'streaming';
   const title = lane === 'baseline' ? 'LLM routing' : 'Jev routing';
 
@@ -257,7 +235,6 @@ function LaneCard({
           <span><small>Time</small>{result.elapsedMs === null ? '-' : `${(result.elapsedMs / 1000).toFixed(1)}s`}</span>
           <span><small>Tools</small>{result.toolCalls}</span>
           <span><small>Docs calls</small>{result.sourceCalls}</span>
-          <span><small>Protocol</small>{result.protocolValid ? 'Pass' : 'Invalid'}</span>
         </div>
       )}
 
@@ -342,8 +319,8 @@ export function App() {
 
   useEffect(() => {
     if (!run || run.phase !== 'complete') return;
-    const baseline = laneResult(baselineMessage, 'baseline');
-    const jev = laneResult(jevMessage, 'jev');
+    const baseline = laneResult(baselineMessage);
+    const jev = laneResult(jevMessage);
     if (!baseline || !jev) return;
     localStorage.setItem(LAST_RESULT_KEY, JSON.stringify({
       pairId: run.pairId,
@@ -422,8 +399,8 @@ export function App() {
     }
   }
 
-  const baselineResult = laneResult(baselineMessage, 'baseline');
-  const jevResult = laneResult(jevMessage, 'jev');
+  const baselineResult = laneResult(baselineMessage);
+  const jevResult = laneResult(jevMessage);
   const comparisonComplete = run?.phase === 'complete' && baselineResult && jevResult;
   const continuingConversation = run?.phase === 'complete' && run.model === model;
 

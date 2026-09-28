@@ -52,7 +52,7 @@ button { color: inherit; }
 .lane-header h2 { margin-top: 2px; font: 700 19px Georgia, "Times New Roman", serif; }
 .lane-header > strong { padding: 4px 7px; border: 1px solid #a7aaa6; color: #727977; font: 800 8px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
 .lane-header > strong.running { border-color: var(--orange); color: var(--orange); animation: pulse 1.15s infinite; }
-.metric-strip { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); background: #ece8de; }
+.metric-strip { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); background: #ece8de; }
 .metric-strip span { padding: 7px 11px; border-right: 1px solid var(--line); font: 800 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .metric-strip span:last-child { border-right: 0; }
 .metric-strip small { display: block; margin-bottom: 2px; color: var(--muted); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; }
