@@ -204,7 +204,7 @@ describe('per-response research trace', () => {
   it('keeps structured Kimi text in the answer while reasoning stays in Events', () => {
     const structured = {
       ...message,
-      metadata: { model: 'kimi-k2-7-code' },
+      metadata: { model: 'kimi-k2-6' },
       parts: [
         { type: 'reasoning', text: 'Check the source.', state: 'done' },
         {

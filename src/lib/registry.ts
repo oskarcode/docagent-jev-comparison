@@ -16,38 +16,6 @@ export const MODEL_REGISTRY = [
     description: 'General-purpose agentic research with reasoning, vision, and long context.',
     capabilities: ['Reasoning', 'Tools', 'Vision'],
   },
-  {
-    id: 'kimi-k2-7-code',
-    name: 'Kimi K2.7 Code',
-    provider: 'Moonshot AI',
-    specifier: 'cloudflare/@cf/moonshotai/kimi-k2.7-code',
-    description: 'Code-focused research and long-horizon technical analysis.',
-    capabilities: ['Reasoning', 'Tools', 'Vision', 'Paid plan'],
-  },
-  {
-    id: 'glm-4-7-flash',
-    name: 'GLM-4.7 Flash',
-    provider: 'Z.ai',
-    specifier: 'cloudflare/@cf/zai-org/glm-4.7-flash',
-    description: 'Fast multilingual research with efficient multi-turn tool use.',
-    capabilities: ['Reasoning', 'Tools', 'Fast'],
-  },
-  {
-    id: 'gemma-4-26b',
-    name: 'Gemma 4 26B',
-    provider: 'Google',
-    specifier: 'cloudflare/@cf/google/gemma-4-26b-a4b-it',
-    description: 'Efficient multimodal research with reasoning and tool calling.',
-    capabilities: ['Reasoning', 'Tools', 'Vision'],
-  },
-  {
-    id: 'gpt-oss-120b',
-    name: 'GPT-OSS 120B',
-    provider: 'OpenAI',
-    specifier: 'cloudflare/@cf/openai/gpt-oss-120b',
-    description: 'Open-weight general-purpose reasoning for production research.',
-    capabilities: ['Reasoning', 'Tools'],
-  },
 ] as const;
 
 // Model IDs form a compile-time union derived from the runtime allowlist; GLM-5.2 is the fresh-browser default.

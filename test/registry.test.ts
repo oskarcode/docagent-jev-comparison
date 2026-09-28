@@ -32,7 +32,8 @@ describe('research registries', () => {
     expect(DEFAULT_MODEL_ID).toBe('glm-5-2');
     expect(MODEL_REGISTRY[0].id).toBe(DEFAULT_MODEL_ID);
     expect(isModelId('kimi-k2-6')).toBe(true);
-    expect(isModelId('gpt-oss-120b')).toBe(true);
+    expect(isModelId('gpt-oss-120b')).toBe(false);
+    expect(MODEL_REGISTRY).toHaveLength(2);
     expect(isModelId('@cf/arbitrary/model')).toBe(false);
     expect(MODEL_REGISTRY.every((model) => model.specifier.startsWith('cloudflare/@cf/'))).toBe(true);
     expect(modelById('glm-5-2').specifier).toBe('cloudflare/@cf/zai-org/glm-5.2');
