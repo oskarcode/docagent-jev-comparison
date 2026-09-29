@@ -1,137 +1,108 @@
 # DocAgent Compare
 
-DocAgent Compare tests whether Jev or an LLM produces better routing decisions for technical documentation research. It sends the same question through two isolated Flue conversations, gives both lanes the same answer model and official documentation tools, and displays their answers, tool activity, and timing side by side.
+## Start Here (Python/Django Mental Model)
 
-## What It Does
-
-- Compares LLM-based routing with `typesafe/jev` classification under controlled conditions.
-- Researches current Cloudflare and AWS documentation through MCP servers.
-- Preserves independent conversation history for follow-up questions in both lanes.
-- Shows classification, documentation-tool, derived model-response, and total timing.
-
-## How It Works
-
-1. The React UI requests paired conversation IDs from `POST /api/comparisons`.
-2. It sends the same configured prompt to the LLM and Jev Flue agents concurrently.
-3. Each classifier returns the same routing contract: route, vendor scope, query kind, and specificity.
-4. Both agents use the same answer model, MCP connections, retrieval rules, and call budget.
-5. Flue streams each answer and trace to the UI, which derives the comparison metrics.
-
-## Technology Stack
-
-| Technology | Role |
+| This project | Django/Python equivalent |
 | --- | --- |
-| Cloudflare Workers | Hosts the API, agent routers, and static React application. |
-| Flue | Runs durable agent conversations and streams messages and tool events. |
-| Workers AI and AI Gateway | Run the answer model plus LLM and Jev classification requests. |
-| Hono | Defines health checks, comparison creation, middleware, and agent mounts. |
-| React and Vite | Build the comparison interface and local development experience. |
-| Cloudflare Docs and AWS Knowledge MCPs | Provide current first-party documentation. |
+| `src/app.ts` Hono Worker | `urls.py` plus middleware and small API views |
+| `src/agents/research-agent.ts` | Durable async service/task orchestration |
+| `frontend/src/App.tsx` | Django template plus a browser-side controller and state |
+| `src/lib/registry.ts` | Typed settings and allowlists |
+| `wrangler.jsonc` | `settings.py` plus hosting and migration manifest |
 
-## Project Structure
+## What You Actually Maintain
 
-| Path | Purpose |
+1. `frontend/src/App.tsx` for comparison lifecycle, UI state, and timing.
+2. `src/agents/research-agent.ts` for shared agent behavior and lane fairness.
+3. `src/tools/jev-research-router.ts` for both classifier contracts and integrations.
+4. `src/lib/registry.ts` for supported answer models and documentation MCPs.
+
+## What This Project Does
+
+DocAgent Compare is a side-by-side comparison surface for two Flue documentation-research strategies:
+
+| Lane | Routing behavior |
 | --- | --- |
-| `frontend/src/App.tsx` | Comparison lifecycle, Flue clients, UI state, timing, and rendering. |
-| `frontend/src/activity.ts` | Converts Flue message parts into safe answer and trace projections. |
-| `src/app.ts` | Worker entrypoint, middleware, pair creation, and agent routers. |
-| `src/agents/research-agent.ts` | Shared research behavior and lane-specific classifier selection. |
-| `src/tools/jev-research-router.ts` | Matching LLM and Jev classification contracts and API calls. |
-| `src/lib/registry.ts` | Approved answer models, MCP servers, and prompt configuration encoding. |
-| `test/` | Unit tests for activity projection, classifiers, and registries. |
-| `wrangler.jsonc` | Worker, assets, AI, Durable Object, migration, and observability configuration. |
+| LLM routing | A separate call to the selected Workers AI model classifies route, vendor, query kind, and specificity before research. |
+| Jev routing | The Workers AI binding runs `typesafe/jev` to produce the same classification contract before research. |
 
-## APIs and Interfaces
+Both lanes use the same visible question, non-reasoning answer model, MCP connections, classification contract, retrieval rules, call budget, and answer rules. The experimental variable is the classification engine: LLM or Jev.
 
-| Interface | Purpose |
-| --- | --- |
-| `GET /api/health` | Returns basic Worker and framework health metadata. |
-| `POST /api/comparisons` | Validates a model and returns a pair ID plus two fresh conversation IDs. |
-| `/api/agents/baseline/:conversationId` | Flue protocol routes for the LLM-routing control lane. |
-| `/api/agents/jev/:conversationId` | Flue protocol routes for the Jev-routing treatment lane. |
+## Architecture At A Glance
 
-## Run It Locally
+```text
+React browser UI
+  -> Hono Worker API
+  -> baseline and Jev Flue Durable Objects
+  -> AI Gateway / Workers AI classification and answer models
+  -> Cloudflare Docs and AWS Knowledge MCP servers
+  -> streamed answers, activity, and timing comparison
+```
 
-Prerequisites: Node.js 22 or newer, npm, a Cloudflare account, an AI Gateway, and a token with **Account > Workers AI > Read**.
+## Traffic Flow (Input -> Output)
+
+1. The browser requests fresh baseline and Jev IDs from `POST /api/comparisons`.
+2. The browser sends the exact prompt to both Flue agents.
+3. Follow-up questions reuse the same paired agent IDs. Each lane retains its own context, which may diverge after the first answer.
+4. Flue streams answer and tool events while the browser computes elapsed time and call counts.
+5. The latest completed result and model preference are stored in browser local storage.
+6. The comparison shows classification, documentation-tool, derived model-response, and total timing for both lanes.
+
+Flue Durable Objects retain each paired conversation for reliable execution and streaming. Routing and documentation-call budgets are agent instructions rather than runtime-enforced capabilities.
+
+## Hosting and Deployment
+
+- Runtime: Cloudflare Worker, Workers Assets, and two Flue Durable Object classes.
+- Deploy command: `npm run deploy`.
+- Environments: local Wrangler/Vite development and the configured Cloudflare account.
+- Generated deployment inputs: `dist/`, `dist-web/`, and the patched generated Wrangler file.
+
+Configure `CLOUDFLARE_ACCOUNT_ID` and the `CLOUDFLARE_API_TOKEN` Wrangler secret for the LLM classifier before deployment. The Jev classifier uses the Workers AI binding. This project has separate Worker and Durable Object names from the production DocAgent.
+
+Before exposing it publicly, place the Worker behind Cloudflare Access or another authentication boundary. The intentionally simple comparison API does not implement user accounts or application-level rate limiting.
+
+## Quick Start
 
 ```bash
 npm install
 cp .dev.vars.example .dev.vars
-```
-
-Set these values in the untracked `.dev.vars` file:
-
-```text
-CLOUDFLARE_ACCOUNT_ID=<YOUR_ACCOUNT_ID>
-CLOUDFLARE_API_TOKEN=<YOUR_WORKERS_AI_TOKEN>
-```
-
-Start the Worker and, optionally, the separate React HMR server:
-
-```bash
 npm run dev
+# In a second terminal for React HMR:
 npm run dev:web
 ```
 
-Validate the project with:
+Required `.dev.vars` values for the LLM classifier lane:
+
+```text
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+```
+
+The token requires **Account > Workers AI > Read**. Optional MCP bearer-token fields are documented in `.dev.vars.example`.
+
+Validation:
 
 ```bash
 npm run check
 ```
 
-## Deploy Your Own Copy
+## Security Model
 
-1. Replace `AI_GATEWAY_ID` in `wrangler.jsonc` with your AI Gateway ID.
-2. Add production values without committing them:
+- Auth boundary: not implemented in application code; use Cloudflare Access before public exposure.
+- Secrets: `CLOUDFLARE_API_TOKEN` and optional MCP bearer tokens remain server-side.
+- Network safety: MCP endpoint overrides must use HTTPS.
+- UI diagnostics: raw MCP output is excluded from the rendered event trace.
 
-```bash
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_API_TOKEN
-```
+## APIs and Interfaces
 
-3. Deploy the Worker, assets, and generated Flue Durable Objects:
+- `GET /api/health`: basic Worker health response.
+- `POST /api/comparisons`: validates a model ID and returns fresh baseline/Jev conversation IDs.
+- `/api/agents/baseline/:conversationId`: Flue control-lane conversation routes.
+- `/api/agents/jev/:conversationId`: Flue treatment-lane conversation routes.
 
-```bash
-npm run deploy
-```
+## Troubleshooting Jump Table
 
-## Security Notes
-
-- The application does not implement user authentication or application-level rate limiting. Put public deployments behind Cloudflare Access or another authentication boundary.
-- API tokens and optional MCP bearer tokens are server-side secrets and must never be committed.
-- MCP endpoint overrides must use HTTPS before credentials are attached.
-- The comparison creation endpoint accepts only models from the registry allowlist and limits agent request bodies to 20 KB.
-- Routing and documentation-call budgets are agent instructions rather than runtime-enforced capabilities.
-
-## Customize It
-
-| Goal | File |
-| --- | --- |
-| Add or remove an answer model | `src/lib/registry.ts` |
-| Change classifier questions or schema | `src/tools/jev-research-router.ts` |
-| Change shared research instructions | `src/agents/research-agent.ts` |
-| Add a metric or change comparison behavior | `frontend/src/App.tsx` |
-| Change event labels or trace projection | `frontend/src/activity.ts` |
-| Change Worker bindings or deployment settings | `wrangler.jsonc` |
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Classification request fails | Confirm `.dev.vars`, token permissions, and AI Gateway configuration, then inspect `src/tools/jev-research-router.ts`. |
-| Browser cannot reach the local API | Run `npm run dev`; when using React HMR, also run `npm run dev:web`. |
-| Wrong documentation source is called | Inspect the routing signal and MCP events produced by `src/agents/research-agent.ts`. |
-| SPA is missing after deployment | Run `npm run check` and inspect `scripts/prepare-deploy.mjs` plus the generated Wrangler config. |
-| Type or test validation fails | Run `npm run check:types` and `npm test` separately for focused output. |
-
-## Official References
-
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
-- [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/)
-- [Cloudflare Workers AI models](https://developers.cloudflare.com/workers-ai/models/)
-- [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
-- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
-
-## License
-
-No license is currently included. All rights are reserved unless a license is added later.
+- If classification fails, check the LLM credentials, Workers AI binding, AI Gateway configuration, and `src/tools/jev-research-router.ts`.
+- If the UI cannot reach the API locally, run both `npm run dev` and `npm run dev:web`.
+- If the wrong documentation source is called, inspect the lane event stream and the routing signal.
+- If deployment misses the SPA, inspect `scripts/prepare-deploy.mjs` and the generated Wrangler config.
