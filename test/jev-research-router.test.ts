@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { unwrapJevResponse, unwrapLlmClassification } from '../src/tools/jev-research-router.ts';
+import {
+  classifyResearchQueryWithJev,
+  unwrapJevResponse,
+  unwrapLlmClassification,
+} from '../src/tools/jev-research-router.ts';
 
 describe('Jev response parsing', () => {
   it('unwraps Cloudflare API and nested universal endpoint envelopes', () => {
@@ -12,6 +16,26 @@ describe('Jev response parsing', () => {
   it('rejects malformed responses before they reach the research model', () => {
     expect(() => unwrapJevResponse(null)).toThrow('non-object');
     expect(() => unwrapJevResponse({ result: { model: 'typesafe/jev' } })).toThrow('unexpected response shape');
+  });
+
+  it('runs Jev through the Workers AI binding and configured gateway', async () => {
+    const result = { model: 'typesafe/jev', answers: { route: { choice: 'research' } } };
+    const run = vi.fn().mockResolvedValue(result);
+    const signal = new AbortController().signal;
+
+    await expect(classifyResearchQueryWithJev('How do Workers bindings work?', signal, { run } as unknown as Ai, 'test-gateway')).resolves.toEqual(result);
+    expect(run).toHaveBeenCalledWith(
+      'typesafe/jev',
+      expect.objectContaining({ state: 'How do Workers bindings work?' }),
+      expect.objectContaining({
+        signal,
+        gateway: expect.objectContaining({
+          id: 'test-gateway',
+          skipCache: true,
+          collectLog: true,
+        }),
+      }),
+    );
   });
 });
 

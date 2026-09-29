@@ -168,31 +168,28 @@ export async function classifyResearchQueryWithLlm(state: string, modelSpecifier
   return unwrapLlmClassification(await response.json(), model);
 }
 
-export async function classifyResearchQueryWithJev(state: string, signal: AbortSignal): Promise<JsonRecord> {
-  const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
-  const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
-  const gatewayId = process.env.JEV_AI_GATEWAY_ID?.trim() || requiredEnv('AI_GATEWAY_ID');
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`, {
-    method: 'POST',
-    signal,
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      'Content-Type': 'application/json',
-      'cf-aig-gateway-id': gatewayId,
-      'cf-aig-skip-cache': process.env.JEV_SKIP_CACHE?.trim() || 'true',
-      'cf-aig-collect-log': 'true',
-      'cf-aig-metadata': JSON.stringify({ application: 'docagent-jev-comparison', component: 'query-router' }),
+export async function classifyResearchQueryWithJev(
+  state: string,
+  signal: AbortSignal,
+  ai: Ai,
+  configuredGatewayId: string,
+): Promise<JsonRecord> {
+  const gatewayId = process.env.JEV_AI_GATEWAY_ID?.trim() || configuredGatewayId.trim();
+  if (!gatewayId) throw new Error('Jev routing is not configured. Set AI_GATEWAY_ID.');
+
+  const response = await ai.run(
+    process.env.JEV_MODEL?.trim() || 'typesafe/jev',
+    { state, questions: QUESTIONS },
+    {
+      signal,
+      gateway: {
+        id: gatewayId,
+        skipCache: process.env.JEV_SKIP_CACHE?.trim() !== 'false',
+        collectLog: true,
+        metadata: { application: 'docagent-jev-comparison', component: 'query-router' },
+      },
     },
-    body: JSON.stringify({
-      model: process.env.JEV_MODEL?.trim() || 'typesafe/jev',
-      input: { state, questions: QUESTIONS },
-    }),
-  });
+  );
 
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 1_000);
-    throw new Error(`Cloudflare Jev request failed (${response.status}): ${detail}`);
-  }
-
-  return unwrapJevResponse(await response.json());
+  return unwrapJevResponse(response);
 }

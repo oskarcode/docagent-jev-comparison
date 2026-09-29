@@ -1,5 +1,6 @@
 'use agent';
 
+import { env as workerEnv } from 'cloudflare:workers';
 import {
   type AgentProps,
   useAgentStart,
@@ -25,6 +26,13 @@ import {
 
 export type RoutingMode = 'baseline' | 'jev';
 
+type Bindings = {
+  AI: Ai;
+  AI_GATEWAY_ID: string;
+};
+
+const bindings = workerEnv as unknown as Bindings;
+
 function mcpRuntimeConfig(server: McpServerDefinition): { url: string; auth?: string } {
   const url = server.urlEnv ? process.env[server.urlEnv]?.trim() : undefined;
   const auth = server.authEnv ? process.env[server.authEnv]?.trim() : undefined;
@@ -47,7 +55,7 @@ function useResearchAgent({ id }: AgentProps, routingMode: RoutingMode) {
     const classificationStartedAt = Date.now();
     writeClassification({ engine, state: 'running' });
     const output = routingMode === 'jev'
-      ? await classifyResearchQueryWithJev(configuredPrompt.prompt, signal)
+      ? await classifyResearchQueryWithJev(configuredPrompt.prompt, signal, bindings.AI, bindings.AI_GATEWAY_ID)
       : await classifyResearchQueryWithLlm(configuredPrompt.prompt, model.specifier, signal);
     writeClassification({ engine, state: 'complete', output, durationMs: Date.now() - classificationStartedAt });
     append({
